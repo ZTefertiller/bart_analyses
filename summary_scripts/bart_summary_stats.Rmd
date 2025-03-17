@@ -1,0 +1,179 @@
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(WRS2)
+library(ggsignif)
+```
+
+
+```{r}
+data <- read.csv('/Users/zachtefertiller/Desktop/Bart_Jatos_Results_Reversal_180/balloon_task_clean_data.csv')
+data <- data %>%
+  mutate(trial_number = as.numeric(trial_number)) %>%
+  group_by(participant_id, balloon_color) %>% 
+  arrange(trial_number) %>% 
+  mutate(block = ceiling(row_number()/10)) %>% 
+  ungroup()
+data_clean <- data %>% filter(popped == 0)
+```
+
+
+
+
+```{r}
+robust_anova_by_color <- function(color) {
+  data_color <- data_clean %>% 
+    filter(balloon_color == color) %>% 
+    mutate(dummy = factor(1))
+  anova_result <- rmanova(inflations ~ block, 
+                          data = data_color, 
+                          subject = factor(data_color$participant_id), 
+                          groups = data_color$dummy,
+                          blocks = factor(data_color$block),
+                          tr = 0.2)
+  print(anova_result)
+  fill_color <- switch(color, "b" = "#4444FF", "o" = "orange", "y" = "yellow", "grey")
+  boxplot_block <- ggplot(data_color, aes(x = factor(block), y = inflations)) +
+    geom_boxplot(fill = fill_color) +
+    labs(title = paste0("Inflations by Block for ", color, " Balloons"), 
+         x = "Block", y = "Inflations") +
+    theme_minimal() +
+    theme(text = element_text(family = "Courier New", face = "bold"))
+  print(boxplot_block)
+  return(list(anova = anova_result, boxplot = boxplot_block))
+}
+
+blue_results <- robust_anova_by_color("b")
+
+
+```
+
+
+
+
+```{r}
+# mann whitney u comparisons:
+
+# blue 1 // orange 4
+test_a <- data_clean %>% 
+  filter((balloon_color == "b" & block == 1) | (balloon_color == "o" & block == 4)) %>% 
+  mutate(group = ifelse(balloon_color == "b", "blue1", "orange4"))
+res_a <- wilcox.test(inflations ~ group, data = test_a)
+
+# blue 2 // orange 5
+test_b <- data_clean %>% 
+  filter((balloon_color == "b" & block == 2) | (balloon_color == "o" & block == 5)) %>% 
+  mutate(group = ifelse(balloon_color == "b", "blue2", "orange5"))
+res_b <- wilcox.test(inflations ~ group, data = test_b)
+
+# blue 3 // orange 6
+test_c <- data_clean %>% 
+  filter((balloon_color == "b" & block == 3) | (balloon_color == "o" & block == 6)) %>% 
+  mutate(group = ifelse(balloon_color == "b", "blue3", "orange6"))
+res_c <- wilcox.test(inflations ~ group, data = test_c)
+```
+
+
+
+
+```{r}
+# plotting mann whitney u
+
+sig_a <- if(res_a$p.value < 0.001) {"***"} else if(res_a$p.value < 0.01) {"**"} else if(res_a$p.value < 0.05) {"*"} else {"ns"}
+sig_b <- if(res_b$p.value < 0.001) {"***"} else if(res_b$p.value < 0.01) {"**"} else if(res_b$p.value < 0.05) {"*"} else {"ns"}
+sig_c <- if(res_c$p.value < 0.001) {"***"} else if(res_c$p.value < 0.01) {"**"} else if(res_c$p.value < 0.05) {"*"} else {"ns"}
+
+blue_orange_data <- data_clean %>% 
+  filter((balloon_color == "b" & block <= 3) | (balloon_color == "o" & block >= 4)) %>% 
+  mutate(balloon_color = factor(balloon_color, levels = c("b", "o")))
+max_block <- max(blue_orange_data$block, na.rm = TRUE)
+max_inflation <- max(blue_orange_data$inflations, na.rm = TRUE)
+min_orange <- min(blue_orange_data$block[blue_orange_data$balloon_color == "o"], na.rm = TRUE)
+max_orange <- max(blue_orange_data$block[blue_orange_data$balloon_color == "o"], na.rm = TRUE)
+mid_orange <- (min_orange + max_orange) / 2
+
+# sig line offsets
+offset_a <- max_inflation * 0.05
+offset_b <- max_inflation * 0.10
+offset_c <- max_inflation * 0.15
+
+combined_boxplot <- ggplot(blue_orange_data, aes(x = factor(block), y = inflations, fill = balloon_color)) +
+  annotate("rect", xmin = 0.5, xmax = 3.5, ymin = -Inf, ymax = Inf, fill = "gray", alpha = 0.2) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("b" = "#4444FF", "o" = "orange")) +
+  scale_x_discrete(labels = c("1" = "1\n(random 1)", 
+                              "2" = "2\n(blue 1)", 
+                              "3" = "3\n(blue 2)", 
+                              "4" = "4\n(random 2)", 
+                              "5" = "5\n(orange 3)", 
+                              "6" = "6\n(orange 4)")) +
+  labs(title = "Average Inflations: High-Value Balloon", 
+           x = "Block", y = "Inflations (no exploded balloons)") +
+  theme_minimal() +
+  theme(text = element_text(family = "Courier New", face = "bold"),
+           legend.position = "none") +
+  annotate("text", x = 2, y = min(blue_orange_data$inflations, na.rm = TRUE) - 0.05 * max_inflation, 
+           label = "(pre-reversal)", hjust = 0.5, vjust = 1, 
+           family = "Courier New", fontface = "bold") +
+  annotate("text", x = mid_orange, y = min(blue_orange_data$inflations, na.rm = TRUE) - 0.05 * max_inflation, 
+           label = "(post reversal)", hjust = 0.5, vjust = 1, 
+           family = "Courier New", fontface = "bold") +
+  geom_signif(comparisons = list(c("1", "4")), annotation = sig_a, 
+              y_position = max_inflation + offset_a - 0.03 * max_inflation - 7, tip_length = 0.03) +
+  geom_signif(comparisons = list(c("2", "5")), annotation = sig_b, 
+              y_position = max_inflation + offset_b - 0.03 * max_inflation - 5, tip_length = 0.03) +
+  geom_signif(comparisons = list(c("3", "6")), annotation = sig_c, 
+              y_position = max_inflation + offset_c - 0.03 * max_inflation - 3, tip_length = 0.03)
+
+
+print(combined_boxplot)
+ggsave("/Users/zachtefertiller/Desktop/reversal_mann_whitney.png", plot = combined_boxplot, width = 3840, height = 2160, dpi = 300, units = "px", bg = "white", limitsize = FALSE)
+```
+
+
+
+
+```{r}
+# box plot for each trial, all trials
+
+trial_breaks <- sort(unique(data$trial_number))
+trial_breaks <- trial_breaks[trial_breaks %% 10 == 0] # label x axis every 10th trial
+
+all_trials_box <- data %>%
+  mutate(trial_number_f = factor(trial_number)) %>%
+  ggplot(aes(x = trial_number_f, y = inflations, fill = balloon_color)) +
+    coord_cartesian(ylim = c(0, 55)) +
+    geom_vline(xintercept = 90, linewidth = .5) +
+    geom_vline(xintercept = c(30, 40, 50, 60, 70, 80, 90, 120, 130, 140, 150, 160, 170),
+       size = .3, linetype = "dashed") +
+    annotate("rect", xmin = 0, xmax = 30, ymin = -Inf, ymax = Inf, fill = "gray", alpha = 0.2) +
+    annotate("rect", xmin = 30, xmax = 50, ymin = -Inf, ymax = Inf, fill = "#4444FF", alpha = 0.15) +
+    annotate("rect", xmin = 50, xmax = 70, ymin = -Inf, ymax = Inf, fill = "#FFA500", alpha = 0.15) +
+    annotate("rect", xmin = 70, xmax = 90, ymin = -Inf, ymax = Inf, fill = "#FFD700", alpha = 0.15) +
+    annotate("rect", xmin = 90, xmax = 120, ymin = -Inf, ymax = Inf, fill = "gray", alpha = 0.2) +
+    annotate("rect", xmin = 120, xmax = 140, ymin = -Inf, ymax = Inf, fill = "#4444FF", alpha = 0.15) +
+    annotate("rect", xmin = 140, xmax = 160, ymin = -Inf, ymax = Inf, fill = "#FFA500", alpha = 0.15) +
+    annotate("rect", xmin = 160, xmax = 180, ymin = -Inf, ymax = Inf, fill = "#FFD700", alpha = 0.15) +
+    geom_boxplot(alpha = .9, width = 1, outlier.shape = NA) +
+    scale_fill_manual(values = 
+       c("y" = "#FFD700",  
+         "b" = "#4444FF",  
+         "o" = "#FFA500")) + 
+    scale_x_discrete(breaks = as.character(trial_breaks)) +
+    labs(
+       title = "Average Inflations: All Balloons (blue/orange reverse average breakpoints at trial 90)",
+       x = "Trial Number",
+       y = "Inflations") +
+    theme_minimal() +
+    theme(
+       axis.text.x = element_text(angle = 45, hjust = 1),
+       text = element_text(family = "Courier New", face = "bold"),
+       legend.title = element_blank(),   
+       legend.position = "none")
+
+print(all_trials_box)
+
+ggsave("/Users/zachtefertiller/Desktop/box_plot_all_trials.png", plot = all_trials_box, width = 3840, height = 2160, dpi = 300, units = "px", bg = "white", limitsize = FALSE)
+
+```
