@@ -1,0 +1,470 @@
+# ---
+# title:  "STL_model_fit"
+# author: "Zach Tefertiller"
+# date:   "2025-02-24"
+# output: html_document
+# zachary.tefertiller@tum.de
+# ---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load libraries and dataset}
+
+library(dplyr)
+library(bayesplot)
+library(ggplot2)
+library(rstan)
+library(pryr)
+library(loo)
+
+# initial setup for my own task design, adapt balloon_color in the code and dataset as needed.
+
+dataset <- read.csv('/Users/zachtefertiller/Desktop/BART RL 180 Data/balloon_task_clean_data.csv', header=TRUE, sep=",", stringsAsFactors=FALSE)
+
+# setup dataframe for reversal
+df <- dataset %>%
+  mutate(color_max = case_when(
+    balloon_color == 'y' ~ 32,
+    balloon_color == 'o' & trial_number > 91 ~ 128,
+    balloon_color == 'o' & trial_number < 91 ~ 8,
+    balloon_color == 'b' & trial_number < 91 ~ 128,
+    balloon_color == 'b' & trial_number >= 91 ~ 8
+  ))
+
+print_df_info <- function(df) {
+  df_name <- deparse(substitute(df))
+  number_of_participants <- length(unique(df$participant_id))
+  number_of_trials <- nrow(df) / number_of_participants
+  cat("Dataframe used:", df_name, "\n")
+  cat("Number of trials per participant:", number_of_trials, "\n")
+  cat("Number of participants with criteria:", number_of_participants, "\n")
+  return(list(
+    number_of_participants = number_of_participants,
+    number_of_trials = number_of_trials
+  ))
+}
+
+```
+
+
+```{r summarize questionnaires if included}
+# run this if you want to include spq, pdi, and caps in model
+
+# dropping people who lack all questionnaires
+df <- df %>%
+  filter(!is.na(caps_total) & !is.na(pdi_total))
+
+
+# summarize questionnaires, z-score, put in other dataframe for when we call
+df_questionnaires <- df %>%
+  group_by(participant_id) %>%
+  summarise(
+    spq_total  = first(spq_total_score),
+    caps_total = first(caps_total),
+    pdi_total  = first(pdi_total),
+    pdi_distress  = first(pdi_distress),
+    pdi_frequency  = first(pdi_frequency),
+    pdi_conviction  = first(pdi_conviction),
+    caps_distress = first(caps_distress),
+    caps_frequency = first(caps_frequency),
+    caps_intrusiveness = first(caps_intrusiveness),
+    phq_total = first(phq_total),  
+    mdq_total = first(mdq_total),
+    ppgm_total = first(ppgm_total),
+    ipip_total = first(ipip_total_score),
+    
+  ) %>%
+  mutate(
+    spq_z  = as.vector(scale(spq_total, center = TRUE, scale = TRUE)),
+    caps_z = as.vector(scale(caps_total, center = TRUE, scale = TRUE)),
+    pdi_z  = as.vector(scale(pdi_total, center = TRUE, scale = TRUE))
+  )
+
+df <- df %>% 
+  left_join(df_questionnaires, by = "participant_id")
+
+questionnaires <- df_questionnaires %>% 
+  arrange(participant_id)
+
+
+```
+
+
+```{r different datasets per balloon color}
+# separate data for when blue and orange are the high value balloon. yellow is constant
+df_blue <- df %>% 
+  filter(balloon_color == "b", color_max != 8) %>%
+  arrange(participant_id, trial_number)
+
+df_orange <- df %>% 
+  filter(balloon_color == "o", color_max != 8) %>%
+  arrange(participant_id, trial_number)
+
+df_yellow <- df %>%
+  filter(balloon_color == "y") %>%
+  arrange(participant_id,trial_number)
+```
+
+
+```{r filter participants based on questionnaires}
+
+# quantiles <- quantile(df_blue$spq_total_score, probs = c(0.1, 0.9), na.rm = TRUE)
+
+# bottom_cutoff <- quantiles[1]
+# top_cutoff <- quantiles[2]
+
+mean_spq <- mean(df_blue$spq_total_score, na.rm = TRUE)
+sd_spq   <- sd(df_blue$spq_total_score, na.rm = TRUE)
+
+bottom_cutoff <- mean_spq - .80 * sd_spq
+top_cutoff    <- mean_spq + .80 * sd_spq
+
+
+df_blue_high_spq <- df_blue %>%
+ # filter(spq_total_score >= 10)
+  filter(spq_total_score >= top_cutoff)
+
+df_blue_low_spq <- df_blue %>%
+ # filter(spq_total_score <= 10)
+  filter(spq_total_score <= bottom_cutoff)
+
+df_orange_high_spq <- df_orange %>%
+ # filter(spq_total_score >= 10)
+  filter(spq_total_score >= top_cutoff)
+
+df_orange_low_spq <- df_orange %>%
+ # filter(spq_total_score <= 10)
+  filter(spq_total_score <= bottom_cutoff)
+
+df_yellow_high_spq <- df_yellow %>%
+ # filter(spq_total_score <= 10)
+  filter(spq_total_score >= top_cutoff)
+
+df_yellow_low_spq <- df_yellow %>%
+ # filter(spq_total_score <= 10)
+  filter(spq_total_score <= bottom_cutoff)
+
+
+  
+print(cat("high spq scorers:", length(unique(df_blue_high_spq$participant_id)), "\n"))
+print(cat("sanity check # of trials per person: ",
+((nrow(df_blue_high_spq))/(length(unique(df_blue_high_spq$participant_id))))))
+
+print(cat("low spq scorers:", length(unique(df_blue_low_spq$participant_id)), "\n"))
+print(cat("sanity check # of trials per person: ", ((nrow(df_blue_low_spq))/(length(unique(df_blue_low_spq$participant_id))))))
+
+```
+
+
+```{r load function: stan input data}
+# function for assembling the data for STAN model
+# questionnaires excluded as model params by default
+
+create_stan_params <- function(df, include_questionnaires = FALSE) {
+  nsub <- length(unique(df$participant_id))
+  ntrial <- nrow(df) / nsub
+  outcome   <- matrix(df$popped, nrow = nsub, ncol = ntrial, byrow = TRUE)
+  npumps    <- matrix(df$inflations, nrow = nsub, ncol = ntrial, byrow = TRUE)
+  color_max <- matrix(df$color_max, nrow = nsub, ncol = ntrial, byrow = TRUE)
+  opportunity <- npumps + (1 - outcome)
+  maxpump <- max(color_max)
+  
+  d <- array(75, dim = c(nsub, ntrial, maxpump))
+  for (i in 1:nsub) {
+    for (j in 1:ntrial) {
+      pumps <- npumps[i, j]
+      out   <- outcome[i, j]
+      if (pumps > 0) {
+        d[i, j, 1:pumps] <- rep(1, pumps)
+      }
+      if (pumps < maxpump && out == 0) {
+        d[i, j, pumps + 1] <- 0
+      }
+    }
+  }
+  
+  stan_data <- list(
+    nsub = nsub,
+    ntrial = ntrial,
+    outcome = outcome,
+    npumps = npumps,
+    color_max = color_max,
+    opportunity = opportunity,
+    maxpump = maxpump,
+    d = d
+  )
+
+  if (include_questionnaires) {
+      questionnaires <- data.frame(
+        participant_id = df$participant_id[!duplicated(df$participant_id)],
+        spq_z = df$spq_z[!duplicated(df$participant_id)],
+        caps_z = df$caps_z[!duplicated(df$participant_id)],
+        pdi_z = df$pdi_z[!duplicated(df$participant_id)]
+      )
+      stan_data$spq  <- questionnaires$spq_z    # spq paired w/ participant_ids
+      stan_data$caps <- questionnaires$caps_z   # caps 
+      stan_data$pdi  <- questionnaires$pdi_z    # pdi
+  }
+  
+  return(stan_data)
+}
+```
+
+
+```{r loading stan parameters}
+stan_data_orange <- create_stan_params(df_orange)
+stan_data_blue <- create_stan_params(df_blue)
+stan_data_blue_high_spq <- create_stan_params(df_blue_high_spq)
+stan_data_blue_low_spq <- create_stan_params(df_blue_low_spq)
+stan_data_orange_low_spq <- create_stan_params(df_orange_low_spq)
+stan_data_orange_high_spq <- create_stan_params(df_orange_high_spq)
+stan_data_yellow_low_spq <- create_stan_params(df_yellow_low_spq)
+stan_data_yellow_high_spq <- create_stan_params(df_yellow_high_spq)
+stan_data_yellow <- create_stan_params(df_yellow)
+```
+
+
+```{r load function: fit model}
+# run the model and provide a string for fit_name for the environment and saving to desktop
+run_stan_fit <- function(data, fit_name = "default") {
+  sample_file <- paste0("/Users/zachtefertiller/Desktop/", "mcmc", fit_name)
+  memory_used <- mem_change({
+    mod <- stan_model(file = "/Users/zachtefertiller/Desktop/STL_toy/STL_HBM_color.stan")
+    fit <- sampling(
+      mod,
+      data = data,          # stan data
+      iter = 3000,          # iterations total
+      warmup = 1000,        # how many burn in out of total
+      save_warmup = TRUE,
+      chains = 4,           # number of chains
+      seed = 10191998,      # (it is my birthday in MM-DD-YYYY btw)
+      sample_file = sample_file,  # file path to save results in csv
+      cores = 6             # parallel chains (overloads system memory if too many)
+    )
+  })
+  print(memory_used)
+  assign(fit_name, fit, envir = .GlobalEnv)
+  saveRDS(fit, file = paste0("/Users/zachtefertiller/Desktop/", fit_name, ".rds"))
+  return(fit)
+}
+```
+
+
+```{r}
+ 
+blue_high_spq <- run_stan_fit(stan_data_blue_high_spq, "blue_high_spq")
+blue_low_spq <- run_stan_fit(stan_data_blue_low_spq, "blue_low_spq")
+orange_high_spq <- run_stan_fit(stan_data_orange_high_spq, "orange_high_spq")
+orange_low_spq <- run_stan_fit(stan_data_orange_low_spq, "orange_low_spq")
+yellow_high_spq <- run_stan_fit(stan_data_yellow_high_spq, "yellow_high_spq")
+yellow_low_spq <- run_stan_fit(stan_data_yellow_low_spq, "yellow_low_spq")
+
+```
+
+
+```{r}
+get_draws <- function(fit, include_questionnaires = FALSE, extra_parameters = NULL) {
+  if (include_questionnaires) {
+    group_factors <- c("mu_vwin", "mu_vloss", "mu_omegaone",
+                       "mu_beta", "beta_vwin_spq", "beta_vloss_spq",
+                       "beta_beta_spq", "beta_omegaone_spq", "beta_vwin_caps",
+                       "beta_vloss_caps", "beta_beta_caps", "beta_omegaone_caps",
+                       "beta_vwin_pdi", "beta_vloss_pdi", "beta_omegaone_pdi",
+                       "beta_beta_pdi")
+  } 
+  else {
+    group_factors <- c("mu_vwin", "mu_vloss", "mu_omegaone",
+                       "mu_beta", "vwin", "vloss", "beta", "omegaone")
+  }
+  
+  if (!is.null(extra_parameters)) {
+    group_factors <- c(group_factors, extra_parameters)
+  }
+  
+  #draws_array <- as.array(fit, pars = group_factors, inc_warmup = TRUE)
+  draws_array <- rstan::extract(fit, permuted = FALSE, inc_warmup = TRUE)
+  print(draws_array)
+  return(draws_array)
+}
+```
+
+
+```{r load function: summary stanfit function}
+# function to get summary stats for the model
+summarize_stanfit <- function(fit, questions = NULL, include_loo = TRUE) {
+  base_pars <- c("mu_vwin", "mu_vloss", "mu_omegaone", "mu_beta", "vwin", "vloss", "omegaone", "beta")
+  
+  # in case you add questionnaires as a parameter ie a regressor in the model to extract
+  if (!is.null(questions)) {
+    beta_pars <- unlist(lapply(questions, function(q) {
+      paste0("beta_", c("vwin", "vloss", "omegaone", "beta"), "_", q)
+    }))
+    pars <- c(base_pars, beta_pars)
+  } else {
+    pars <- base_pars
+  }
+  params_summary <- summary(fit, pars = pars)$summary
+  print(params_summary)
+  
+  
+  
+  # commented out generating quantities because of very high memory usage, need to   simulate posterior predictions from model output in order to use loo
+  
+  # library(loo)
+  # log_lik <- extract_log_lik(fit, merge_chains = FALSE)
+  # loo_result <- loo(log_lik)
+  # print(loo_result)
+  
+}
+
+```
+
+
+```{r trace plot}
+# function for trace plot of main group parameters
+plot_group_trace <- function(fit_obj, warmup = NULL, iter = NULL) {
+  color_scheme_set(c( "#BF6CAF", "#80384B", "#FF595E","#404A9C", "#7F7EFF", "#011638"))
+  fit_name <- deparse(substitute(fit_obj))
+  if (is.null(warmup)) {
+    warmup <- fit_obj@sim$warmup
+  }
+  if (is.null(iter)) {
+    iter <- fit_obj@sim$iter
+  }
+  cat("Warmup iterations:", warmup, "\n")
+  cat("Total iterations:", iter, "\n")
+  
+  
+  # cant get warmup shading right
+draws <- as.array(fit_obj, pars = c("mu_vwin", "mu_vloss", "mu_omegaone", "mu_beta"))
+traceplot_params <- mcmc_trace(draws, pars = c("mu_vwin", "mu_vloss", "mu_omegaone", "mu_beta"),          n_warmup = 0, np_style = trace_style_np())
+  traceplot_params <- traceplot_params + 
+                        labs(title = "Group Level Parameter Simulations") +
+                        theme(
+                          panel.spacing = unit(3, "lines"),
+                          plot.title = element_text(hjust = 0.5),
+                          text = element_text(family = "Courier New", face = "bold")
+                        ) +
+                        facet_wrap(~parameter, scales = "free_y", labeller = as_labeller(c(
+                        mu_vwin = "Learning Rate for Wins", 
+                        mu_vloss = "Learning Rate for Losses", 
+                        mu_omegaone = "Estimated Number of Pumps",
+                        mu_beta = "Behavioural Consistency")
+                        )) +
+                        scale_x_continuous(limits = c(0, 2000))
+ ggsave(filename = paste0("/Users/zachtefertiller/Desktop/", fit_name, ".png"), 
+         plot = traceplot_params, dpi = 500, width = 8, height = 6, bg = "white")
+  print(traceplot_params)
+}
+```
+
+
+```{r load rds function}
+load_rds_files <- function(folder_path) {
+  rds_files <- list.files(path = folder_path, pattern = "\\.rds$", full.names = TRUE)
+  rds_list <- lapply(rds_files, readRDS)
+  names(rds_list) <- basename(rds_files)
+  return(rds_list)
+}
+
+# Example usage:
+folder <- "/Users/zachtefertiller/Desktop/spq_stl"
+spq_data <- load_rds_files(folder)
+```
+
+```{r}
+vwin_vloss_reversal <- function(group1, group2, color) {
+
+# get draws by gorup
+draws_high <- as.array(blue_high_spq, pars = c("vwin", "vloss"))
+draws_low  <- as.array(blue_all, pars = c("vwin", "vloss"))
+
+# 2. If one model has an extra index (e.g., 21), subset to only indices 1 to 20.
+subset_pars <- function(draws) {
+  param_names <- dimnames(draws)[[3]]
+  keep <- grepl("\\[(?:[1-9]|1[0-9]|20)\\]", param_names)
+  draws[ , , keep, drop = FALSE]
+}
+
+draws_high <- subset_pars(draws_high)
+draws_low  <- subset_pars(draws_low)
+
+#  convert array to df
+df_high <- as.data.frame.table(draws_high, responseName = "value", stringsAsFactors = FALSE)
+df_low  <- as.data.frame.table(draws_low,  responseName = "value", stringsAsFactors = FALSE)
+
+# rename columns in as.data.frame.table: var1 -> iteration, var2 -> chain, var3 -> parameter
+names(df_high)[1:3] <- c("Iteration", "Chain", "Parameter")
+names(df_low)[1:3]  <- c("Iteration", "Chain", "Parameter")
+
+df_high <- df_high %>% mutate(Group = "High Scorers")
+df_low  <- df_low %>% mutate(Group = "Low Scorers")
+df <- bind_rows(df_high, df_low)
+
+df <- df %>%
+  mutate(
+    ParType = ifelse(grepl("vwin", Parameter), "vwin", "vloss"),
+    ParticipantID = as.numeric(gsub(".*\\[([0-9]+)\\]", "\\1", Parameter))
+  )
+
+participant_summary <- df %>%
+  group_by(Group, ParticipantID, ParType) %>%
+  summarise(
+    mean_value = mean(value),
+    lower_cred = quantile(value, 0.025),
+    upper_cred = quantile(value, 0.975),
+    .groups = 'drop'
+  )
+
+# average learning rate per param by group
+group_summary <- participant_summary %>%
+  group_by(Group, ParType) %>%
+  summarise(
+    group_mean = mean(mean_value),
+    group_lower = quantile(mean_value, 0.025),
+    group_upper = quantile(mean_value, 0.975),
+    .groups = 'drop'
+  )
+
+t_test_vwin <- t.test(mean_value ~ Group, data = participant_summary %>% filter(ParType == "vwin"))
+t_test_vloss <- t.test(mean_value ~ Group, data = participant_summary %>% filter(ParType == "vloss"))
+
+print(t_test_vwin)
+print(t_test_vloss)
+
+print(group_summary)
+
+ggplot(participant_summary, aes(x = ParType, y = mean_value, fill = Group)) +
+  geom_boxplot() +
+  labs(title = paste0("Learning Rates by Group - ", color), 
+       x = "Parameters",
+       y = "Posterior Participant Means") +
+  theme_minimal() +
+  theme(text = element_text(family = "Courier New", face = "bold"))
+
+ggsave(filename = paste0(color, "_learning_rate_comparison.png"),
+       plot = last_plot(),
+       width = 8, height = 6, dpi = 300, bg = "#FDE992")
+}
+
+
+```
+
+
+```{r OLD intervals plot}
+# intervals plot
+interval_plot <- mcmc_intervals(draws, pars= group_factors, prob = 0.5)
+ggsave(filename = "/Users/zachtefertiller/Desktop/test.png", 
+       plot = interval_plot, dpi = 500, width = 9, height = 7, bg = "white")
+```
+
+```{r}
+# density plot
+density_plot <- mcmc_dens_overlay(draws, pars = group_factors)
+ggsave(filename = "/Users/zachtefertiller/Desktop/STL_mcmc/2000_all_participants_density.png", 
+       plot = density_plot, dpi = 500, width = 9, height = 7, bg = "white")
+```
+
