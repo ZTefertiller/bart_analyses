@@ -16,6 +16,8 @@ library(ggplot2)
 library(rstan)
 library(pryr)
 library(loo)
+library(gganimate)
+library(reshape2)
 ```
 
 ```{r trace plot}
@@ -133,6 +135,39 @@ ggsave(filename = paste0(color, "_learning_rate_comparison.png"),
 }
 
 ```
+
+```{r animated heatmap matrix evo}
+
+# Assuming theta_samples is an array of dimensions [iterations, rows, cols]
+n_iter <- dim(theta_samples)[1]
+n_rows <- dim(theta_samples)[2]
+n_cols <- dim(theta_samples)[3]
+
+# Build a data frame with a row for each element at each iteration
+df <- do.call(rbind, lapply(1:n_iter, function(i) {
+  m <- theta_samples[i, , ]
+  df_temp <- melt(m)
+  df_temp$Iteration <- i
+  df_temp
+}))
+
+# Create the animated heatmap
+p <- ggplot(df, aes(x = Var2, y = Var1, fill = value)) +
+  geom_tile() +
+  scale_y_reverse() +
+  labs(title = 'Iteration: {frame_time}') +
+  transition_time(Iteration) +
+  ease_aes('linear')
+
+animate(p, nframes = n_iter)
+
+
+```
+
+
+
+
+
 
 ```{r OLD intervals plot}
 # intervals plot

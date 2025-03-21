@@ -1,0 +1,24 @@
+---
+title: "load_rds"
+author: "Zach Tefertiller"
+date: "2025-03-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load rds function}
+load_rds_files <- function(folder_path) {
+  rds_files <- list.files(path = folder_path, pattern = "\\.rds$", full.names = TRUE)
+  rds_list <- lapply(rds_files, readRDS)
+  names(rds_list) <- basename(rds_files)
+  return(rds_list)
+}
+
+# Example usage:
+folder <- "/Users/zachtefertiller/Desktop/spq_stl"
+spq_data <- load_rds_files(folder)
+```
+
