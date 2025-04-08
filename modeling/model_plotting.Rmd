@@ -63,8 +63,8 @@ traceplot_params <- mcmc_trace(draws, pars = c("mu_vwin", "mu_vloss", "mu_omegao
 vwin_vloss_reversal <- function(group1, group2, color) {
 
 # get draws by gorup
-draws_high <- as.array(blue_high_spq, pars = c("vwin", "vloss"))
-draws_low  <- as.array(blue_all, pars = c("vwin", "vloss"))
+draws_high <- as.array(group1, pars = c("vwin", "vloss"))
+draws_low  <- as.array(group2, pars = c("vwin", "vloss"))
 
 # 2. If one model has an extra index (e.g., 21), subset to only indices 1 to 20.
 subset_pars <- function(draws) {
@@ -182,3 +182,17 @@ density_plot <- mcmc_dens_overlay(draws, pars = group_factors)
 ggsave(filename = "/Users/zachtefertiller/Desktop/STL_mcmc/2000_all_participants_density.png", 
        plot = density_plot, dpi = 500, width = 9, height = 7, bg = "white")
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

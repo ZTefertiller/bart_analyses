@@ -22,3 +22,9 @@ folder <- "/Users/zachtefertiller/Desktop/spq_stl"
 spq_data <- load_rds_files(folder)
 ```
 
+
+```{r}
+spq_rds <- load_rds_files('/Users/zachtefertiller/Desktop/stl_results')
+
+
+```

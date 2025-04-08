@@ -109,7 +109,7 @@ df_yellow <- df %>%
 ```
 
 
-```{r filter participants based on questionnaires}
+```{SPQ Groups}
 
 # quantiles <- quantile(df_blue$spq_total_score, probs = c(0.1, 0.9), na.rm = TRUE)
 
@@ -155,6 +155,56 @@ print(cat("sanity check # of trials per person: ",
 
 print(cat("low spq scorers:", length(unique(df_blue_low_spq$participant_id)), "\n"))
 print(cat("sanity check # of trials per person: ", ((nrow(df_blue_low_spq))/(length(unique(df_blue_low_spq$participant_id))))))
+
+```
+
+
+```{CAPS Groups}
+
+quantiles <- quantile(df_blue$caps_total, probs = c(0.1, 0.9), na.rm = TRUE)
+
+bottom_cutoff <- quantiles[1]
+top_cutoff <- quantiles[2]
+
+mean_caps <- mean(df_blue$caps_total, na.rm = TRUE)
+sd_spq   <- sd(df_blue$caps_total, na.rm = TRUE)
+
+# bottom_cutoff <- mean_caps - 1 * sd_caps
+# top_cutoff    <- mean_caps + 1 * sd_caps
+
+
+df_blue_high_caps <- df_blue %>%
+ # filter(caps_total_score >= 10)
+  filter(caps_total_score >= top_cutoff)
+
+df_blue_low_caps <- df_blue %>%
+ # filter(caps_total_score <= 10)
+  filter(caps_total_score <= bottom_cutoff)
+
+df_orange_high_caps <- df_orange %>%
+ # filter(caps_total_score >= 10)
+  filter(caps_total_score >= top_cutoff)
+
+df_orange_low_caps <- df_orange %>%
+ # filter(caps_total_score <= 10)
+  filter(caps_total_score <= bottom_cutoff)
+
+df_yellow_high_caps <- df_yellow %>%
+ # filter(caps_total_score <= 10)
+  filter(caps_total_score >= top_cutoff)
+
+df_yellow_low_caps <- df_yellow %>%
+ # filter(caps_total_score <= 10)
+  filter(caps_total_score <= bottom_cutoff)
+
+
+  
+print(cat("high caps scorers:", length(unique(df_blue_high_caps$participant_id)), "\n"))
+print(cat("sanity check # of trials per person: ",
+((nrow(df_blue_high_caps))/(length(unique(df_blue_high_caps$participant_id))))))
+
+print(cat("low caps scorers:", length(unique(df_blue_low_caps$participant_id)), "\n"))
+print(cat("sanity check # of trials per person: ", ((nrow(df_blue_low_caps))/(length(unique(df_blue_low_caps$participant_id))))))
 
 ```
 
@@ -232,7 +282,7 @@ stan_data_yellow <- create_stan_params(df_yellow)
 run_stan_fit <- function(data, fit_name = "default") {
   sample_file <- paste0("/Users/zachtefertiller/Desktop/", "mcmc", fit_name)
   memory_used <- mem_change({
-    mod <- stan_model(file = "/Users/zachtefertiller/Desktop/STL_toy/STL_HBM_color.stan")
+    mod <- stan_model(file ="/Users/zachtefertiller/Desktop/bart_analyses/modeling/STL_HBM_Questionnaires.stan")
     fit <- sampling(
       mod,
       data = data,          # stan data
@@ -250,6 +300,12 @@ run_stan_fit <- function(data, fit_name = "default") {
   saveRDS(fit, file = paste0("/Users/zachtefertiller/Desktop/", fit_name, ".rds"))
   return(fit)
 }
+```
+
+
+
+```{r}
+blue_stl_all <- run_stan_fit(stan_data_blue)
 ```
 
 
