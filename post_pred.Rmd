@@ -1,0 +1,22 @@
+---
+title: "post_prediction"
+author: "Zach Tefertiller"
+date: "2025-04-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(bayesplot)
+library(ggplot2)
+library(rstan)
+library(pryr)
+library(loo)
+```
+
+```{r simulate STL}
+stl_post_pred <- function(vwin, vloss, omegaone, beta, inflations)
+
+
+```
