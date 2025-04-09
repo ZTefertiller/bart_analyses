@@ -268,15 +268,7 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
 
 
 ```{r loading stan parameters}
-stan_data_orange <- create_stan_params(df_orange)
 stan_data_blue <- create_stl_stan_params(df_blue)
-stan_data_blue_high_spq <- create_stan_params(df_blue_high_spq)
-stan_data_blue_low_spq <- create_stan_params(df_blue_low_spq)
-stan_data_orange_low_spq <- create_stan_params(df_orange_low_spq)
-stan_data_orange_high_spq <- create_stan_params(df_orange_high_spq)
-stan_data_yellow_low_spq <- create_stan_params(df_yellow_low_spq)
-stan_data_yellow_high_spq <- create_stan_params(df_yellow_high_spq)
-stan_data_yellow <- create_stan_params(df_yellow)
 ```
 
 
@@ -308,7 +300,6 @@ run_stan_fit <- function(data, fit_name = "default") {
 ```
 
 
-
 ```{r}
 blue_stl_all <- run_stan_fit(stan_data_blue)
 ```
@@ -324,6 +315,7 @@ yellow_high_spq <- run_stan_fit(stan_data_yellow_high_spq, "yellow_high_spq")
 yellow_low_spq <- run_stan_fit(stan_data_yellow_low_spq, "yellow_low_spq")
 
 ```
+
 
 # get_draws()
 ```{r load function: extract draws}
@@ -352,6 +344,7 @@ get_draws <- function(fit, include_questionnaires = FALSE, extra_parameters = NU
 }
 ```
 
+
 # summarize_stanfit()
 ```{r load function: get stanfit summary}
 # function to get summary stats for the model
@@ -374,10 +367,10 @@ summarize_stanfit <- function(fit, questions = NULL, include_loo = TRUE) {
 
 ```
 
+
 # param_extract()
 ```{r load function: make array for estimated parameters from stanfit summary}
 param_extract <- function(fit_summary) {
-  fit_summary <- fit_summary$summary
   vwin <- fit_summary[grep("^vwin", rownames(fit_summary)), "mean"]
   vloss <- fit_summary[grep("^vloss", rownames(fit_summary)), "mean"]
   omegaone <- fit_summary[grep("^omegaone", rownames(fit_summary)), "mean"]
@@ -394,7 +387,8 @@ param_extract <- function(fit_summary) {
   
   print(params)
 }
-param_extract(blue_stl_summary)
-
 ```
-
+```{r}
+blue_sum <- summarize_stanfit(blue_stl_all)
+blue_params <- param_extract(blue_sum)
+```
