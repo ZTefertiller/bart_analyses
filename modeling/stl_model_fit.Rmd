@@ -89,6 +89,8 @@ df <- df %>%
 questionnaires <- df_questionnaires %>% 
   arrange(participant_id)
 
+sub_ids <- unique(df$participant_id)
+
 
 ```
 
@@ -267,7 +269,7 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
 
 ```{r loading stan parameters}
 stan_data_orange <- create_stan_params(df_orange)
-stan_data_blue <- create_stan_params(df_blue)
+stan_data_blue <- create_stl_stan_params(df_blue)
 stan_data_blue_high_spq <- create_stan_params(df_blue_high_spq)
 stan_data_blue_low_spq <- create_stan_params(df_blue_low_spq)
 stan_data_orange_low_spq <- create_stan_params(df_orange_low_spq)

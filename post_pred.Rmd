@@ -16,7 +16,24 @@ library(loo)
 ```
 
 ```{r simulate STL}
-stl_post_pred <- function(vwin, vloss, omegaone, beta, inflations)
+# this is to take our estimated latent parameters from the stl model per participant and see if it can generate the 
+# outcomes observed in the data that we estimated our parameters from
+stl_post_pred <- function(df, participant) {
+  
+  # get participant's data as single dataframe
+  participant_data <- df[df$participant_id == participant]
+  
+  # get static variables
+  participant_id <- participant
+  vwin <- participant_data$vwin
+  vloss <- participant_data$vloss
+  omegaone <- participant_data$omegaone
+  beta <- participant_data$beta
+  
+  
+  
+
+}
  
 
 ```
