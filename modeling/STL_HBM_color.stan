@@ -8,7 +8,7 @@ data {
   array[nsub, ntrial] int<lower=0, upper=1> outcome;
   array[nsub, ntrial] int<lower=0> npumps;
   array[nsub, ntrial] int<lower=1> opportunity;
-  array[nsub, ntrial] int color_max;  // trial-specific maximum values
+  array[nsub, ntrial] int nmax;  // trial-specific maximum values
   int<lower=1> maxpump;  // overall maximum pump opportunity (e.g., 128)
   array[nsub, ntrial, maxpump] int d;
 }
@@ -51,16 +51,16 @@ model {
     for (k in 1:ntrial) {
 
       if (k < 2){
-        omega[k] = color_max[i, k] * omegaone[i];
+        omega[k] = nmax[i, k] * omegaone[i];
       }
 
       else{
         if (outcome[i, k-1] == 1) {
-          omega[k] = color_max[i, k] * ((omega[k-1] / color_max[i, k]) * 
-                    (1 - (vloss[i] * (1 - (npumps[i, k-1] * 1.0 / color_max[i, k])))));
+          omega[k] = nmax[i, k] * ((omega[k-1] / nmax[i, k]) * 
+                    (1 - (vloss[i] * (1 - (npumps[i, k-1] * 1.0 / nmax[i, k])))));
         } else {
-          omega[k] = color_max[i, k] * ((omega[k-1] / color_max[i, k]) * 
-                    (1 + (vwin[i] * (npumps[i, k-1] * 1.0 / color_max[i, k]))));
+          omega[k] = nmax[i, k] * ((omega[k-1] / nmax[i, k]) * 
+                    (1 + (vwin[i] * (npumps[i, k-1] * 1.0 / nmax[i, k]))));
         }
       }
 
@@ -90,21 +90,21 @@ model {
 //       log_lik[i] = 0;
 //       for (k in 1:ntrial) {
 //         if (k < 2) {
-//           omega[k] = color_max[i, k] * omegaone[i];
+//           omega[k] = nmax[i, k] * omegaone[i];
 //         } else {
 //           if (outcome[i, k-1] == 1) {
-//             omega[k] = color_max[i, k] * ((omega[k-1] / color_max[i, k]) *
-//                         (1 - (vloss[i] * (1 - (npumps[i, k-1] * 1.0 / color_max[i, k])))));
+//             omega[k] = nmax[i, k] * ((omega[k-1] / nmax[i, k]) *
+//                         (1 - (vloss[i] * (1 - (npumps[i, k-1] * 1.0 / nmax[i, k])))));
 //           } else {
-//             omega[k] = color_max[i, k] * ((omega[k-1] / color_max[i, k]) *
-//                         (1 + (vwin[i] * (npumps[i, k-1] * 1.0 / color_max[i, k]))));
+//             omega[k] = nmax[i, k] * ((omega[k-1] / nmax[i, k]) *
+//                         (1 + (vwin[i] * (npumps[i, k-1] * 1.0 / nmax[i, k]))));
 //           }
 // 
 //         }
 //         for (n in 1:opportunity[i, k]) {
 //           log_lik[i] += bernoulli_logit_lpmf(d[i, k, n] | -beta[i] * (n - omega[k]));
 //         }
-//         for (l in 1:color_max[i, k]) {
+//         for (l in 1:nmax[i, k]) {
 //           y_pred[i, k, l] = bernoulli_logit_rng(-beta[i] * (l - omega[k]));
 //         }
 //       }

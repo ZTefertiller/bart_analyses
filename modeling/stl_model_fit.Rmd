@@ -218,9 +218,9 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
   ntrial <- nrow(df) / nsub
   outcome   <- matrix(df$popped, nrow = nsub, ncol = ntrial, byrow = TRUE)
   npumps    <- matrix(df$inflations, nrow = nsub, ncol = ntrial, byrow = TRUE)
-  color_max <- matrix(df$color_max, nrow = nsub, ncol = ntrial, byrow = TRUE)
+  nmax <- matrix(df$optimal_inflations, nrow = nsub, ncol = ntrial, byrow = TRUE)
   opportunity <- npumps + (1 - outcome)
-  maxpump <- max(color_max)
+  maxpump <- max(nmax)
   
   d <- array(75, dim = c(nsub, ntrial, maxpump))
   for (i in 1:nsub) {
@@ -241,7 +241,7 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
     ntrial = ntrial,
     outcome = outcome,
     npumps = npumps,
-    color_max = color_max,
+    nmax = nmax,
     opportunity = opportunity,
     maxpump = maxpump,
     d = d,
@@ -281,7 +281,7 @@ stan_data_yellow <- create_stan_params(df_yellow)
 ```{r load function: fit model}
 # run the model and provide a string for fit_name for the environment and saving to desktop
 run_stan_fit <- function(data, fit_name = "default") {
-  #uncomment below if you want csv files for each chain
+  # uncomment line below and sample_file in the sampling function call to save CSV files per chain 
   #sample_file <- paste0("/Users/zachtefertiller/Desktop/", "mcmc", fit_name)
   memory_used <- mem_change({
     mod <- stan_model(file
@@ -294,7 +294,7 @@ run_stan_fit <- function(data, fit_name = "default") {
       save_warmup = TRUE,
       chains = 4,           # number of chains
       seed = 10191998,      # (it is my birthday in MM-DD-YYYY btw)
-      sample_file = sample_file,  # file path to save results in csv
+      # sample_file = sample_file,  # uncomment for csv file saving
       cores = 6             # parallel chains (overloads system memory if too many)
     )
   })
@@ -323,8 +323,8 @@ yellow_low_spq <- run_stan_fit(stan_data_yellow_low_spq, "yellow_low_spq")
 
 ```
 
-
-```{r}
+# get_draws()
+```{r load function: extract draws}
 get_draws <- function(fit, include_questionnaires = FALSE, extra_parameters = NULL) {
   if (include_questionnaires) {
     group_factors <- c("mu_vwin", "mu_vloss", "mu_omegaone",
@@ -350,8 +350,8 @@ get_draws <- function(fit, include_questionnaires = FALSE, extra_parameters = NU
 }
 ```
 
-
-```{r load function: summary stanfit function}
+# summarize_stanfit()
+```{r load function: get stanfit summary}
 # function to get summary stats for the model
 summarize_stanfit <- function(fit, questions = NULL, include_loo = TRUE) {
   base_pars <- c("mu_vwin", "mu_vloss", "mu_omegaone", "mu_beta", "vwin", "vloss", "omegaone", "beta")
@@ -372,7 +372,8 @@ summarize_stanfit <- function(fit, questions = NULL, include_loo = TRUE) {
 
 ```
 
-```{r make array for estimated parameters}
+# param_extract()
+```{r load function: make array for estimated parameters from stanfit summary}
 param_extract <- function(fit_summary) {
   fit_summary <- fit_summary$summary
   vwin <- fit_summary[grep("^vwin", rownames(fit_summary)), "mean"]

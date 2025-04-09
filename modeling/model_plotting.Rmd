@@ -195,4 +195,3 @@ ggsave(filename = "/Users/zachtefertiller/Desktop/STL_mcmc/2000_all_participants
 
 
 
-

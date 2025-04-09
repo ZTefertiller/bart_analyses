@@ -17,6 +17,6 @@ library(loo)
 
 ```{r simulate STL}
 stl_post_pred <- function(vwin, vloss, omegaone, beta, inflations)
-
+ 
 
 ```
