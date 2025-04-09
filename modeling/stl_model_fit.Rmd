@@ -244,7 +244,8 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
     color_max = color_max,
     opportunity = opportunity,
     maxpump = maxpump,
-    d = d
+    d = d,
+    sub_ids = sub_ids  # including participant ids for tracking in stan summary
   )
 
   if (include_questionnaires) {
@@ -280,7 +281,8 @@ stan_data_yellow <- create_stan_params(df_yellow)
 ```{r load function: fit model}
 # run the model and provide a string for fit_name for the environment and saving to desktop
 run_stan_fit <- function(data, fit_name = "default") {
-  sample_file <- paste0("/Users/zachtefertiller/Desktop/", "mcmc", fit_name)
+  #uncomment below if you want csv files for each chain
+  #sample_file <- paste0("/Users/zachtefertiller/Desktop/", "mcmc", fit_name)
   memory_used <- mem_change({
     mod <- stan_model(file
         ="/Users/zachtefertiller/Desktop/bart_analyses/modeling/STL_HBM_color.stan")
