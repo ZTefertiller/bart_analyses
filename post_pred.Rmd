@@ -5,6 +5,7 @@ date: "2025-04-09"
 output: html_document
 ---
 
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
@@ -15,25 +16,34 @@ library(pryr)
 library(loo)
 ```
 
+
 ```{r simulate STL}
-# this is to take our estimated latent parameters from the stl model per participant and see if it can generate the 
-# outcomes observed in the data that we estimated our parameters from
-stl_post_pred <- function(df, participant) {
-  
-  # get participant's data as single dataframe
-  participant_data <- df[df$participant_id == participant]
+# this is to take our estimated latent parameters from the stl model per participant and see if it can generate the outcomes observed in the data that we estimated our parameters from
+stl_post_pred <- function(participant_data) {
   
   # get static variables
-  participant_id <- participant
+  participant_id <- participant_data$participant_id
   vwin <- participant_data$vwin
   vloss <- participant_data$vloss
   omegaone <- participant_data$omegaone
   beta <- participant_data$beta
   
-  
-  
+  print(vwin)
 
 }
  
 
+```
+
+
+```{r}
+
+# get participant data as single dataframe
+main <- function(df) {
+  
+  for (participant in df$participant_id) {
+    participant_data <- df[df$participant_id == participant,]
+    stl_post_pred(participant_data)
+  }
+}
 ```

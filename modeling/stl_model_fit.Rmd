@@ -372,27 +372,18 @@ summarize_stanfit <- function(fit, questions = NULL, include_loo = TRUE) {
 ```{r load function: make array for estimated parameters from stanfit summary}
 param_extract <- function(fit, sub_ids,
                           pars = c("vwin","vloss","beta","omegaone")) {
-  # 1) get the summary matrix directly from the stanfit:
   sum_mat <- summary(fit, pars = pars)$summary
-  # sum_mat is a matrix with rows like "vwin[1]", "vwin[2]", ... 
-  # and columns including "mean" and "Rhat"
-  
-  # 2) helper to pull out mean & Rhat for one parameter
   extract_stats <- function(param_name) {
     rows   <- grep(paste0("^", param_name, "\\["), rownames(sum_mat))
     means  <- sum_mat[rows, "mean"]
     rhats  <- sum_mat[rows, "Rhat"]
     list(mean = means, Rhat = rhats)
   }
-  
-  # 3) extract each
   stats_list <- lapply(pars, extract_stats)
   names(stats_list) <- pars
-  
-  # 4) build the results data.frame
   df <- data.frame(participant_id = sub_ids, stringsAsFactors = FALSE)
   for (p in pars) {
-    df[[paste0(p, "_mean")]] <- stats_list[[p]]$mean
+    df[[paste0(p)]] <- stats_list[[p]]$mean
     df[[paste0(p, "_Rhat")]] <- stats_list[[p]]$Rhat
   }
   
