@@ -164,7 +164,24 @@ animate(p, nframes = n_iter)
 
 ```
 
-
+```{r}
+ppc_scatterplot <- function(df, trial_number, model_name = "stl") {
+    if (model_name == "stl"){
+      model = "stl_predicted_pumps"
+    }
+    else if (model_name == "ewmv"){
+      model = "ewmv_predicted_pumps"
+    }
+    df_trial <- df %>% filter(trial_number == trial_number)
+    ppc_scatter(
+    y = df_trial$inflations,
+    yrep = matrix(df_trial[[model_col]], nrow = 1))
+    # df %>% filter(trial_number == trial_number)
+    #   ppc_scatter(
+    #     y = df$inflations,
+    #     yrep = matrix(df$model, nrow = 1))
+}
+```
 
 
 
