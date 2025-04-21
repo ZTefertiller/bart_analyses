@@ -7,7 +7,7 @@ stl_post_pred <- function(participant_data) {
   beta <- participant_data$beta[1]
   
   # Store outputs
-  df_out <- data.frame(trial = 1:ntrials,
+  df_out <- data.frame(trial_number = 1:ntrials,
                        predicted_pumps = numeric(ntrials),
                        predicted_pop = numeric(ntrials),
                        omega = numeric(ntrials))
@@ -43,9 +43,9 @@ stl_post_pred <- function(participant_data) {
   }
   
   # Fill dataframe
-  df_out$predicted_pumps <- predicted_pumps
-  df_out$predicted_pop <- predicted_pop
-  df_out$omega <- omega
+  df_out$stl_predicted_pumps <- predicted_pumps
+  df_out$stl_predicted_pop <- predicted_pop
+  df_out$stl_omega <- omega
   df_out$participant_id <- participant_data$participant_id[1]
   
   return(df_out)
