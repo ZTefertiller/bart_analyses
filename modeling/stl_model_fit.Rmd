@@ -395,4 +395,5 @@ param_extract <- function(fit, sub_ids,
 ```{r}
 blue_sum <- summarize_stanfit(blue_stl_all)
 blue_params <- param_extract(blue_stl_all, stan_data_blue$sub_ids)
+blue_merge <- left_join(df_blue, blue_params, by = "participant_id")
 ```
