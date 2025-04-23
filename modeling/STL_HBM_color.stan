@@ -17,17 +17,33 @@ data {
 
 parameters {
   // Group-level parameters
-  real<lower=0> mu_vwin;
-  real<lower=0> mu_vloss;
-  real<lower=0,upper=1> mu_omegaone;
-  real<lower=0> mu_beta;
+  real<lower=0> b_mu_vwin;
+  real<lower=0> b_mu_vloss;
+  real<lower=0,upper=1> b_mu_omegaone;
+  real<lower=0> b_mu_beta;
+  real<lower=0> y_mu_vwin;
+  real<lower=0> y_mu_vloss;
+  real<lower=0,upper=1> y_mu_omegaone;
+  real<lower=0> y_mu_beta;
+  real<lower=0> o_mu_vwin;
+  real<lower=0> o_mu_vloss;
+  real<lower=0,upper=1> o_mu_omegaone;
+  real<lower=0> o_mu_beta;
   vector<lower=0>[4] sigma;
   
 
-  vector<lower=0,upper=1>[nsub] vwin;
-  vector<lower=0,upper=1>[nsub] vloss;
-  vector<lower=0,upper=1>[nsub] omegaone;
-  vector<lower=0,upper=3>[nsub] beta;
+  vector<lower=0,upper=1>[nsub] b_vwin;
+  vector<lower=0,upper=1>[nsub] b_vloss;
+  vector<lower=0,upper=1>[nsub] b_omegaone;
+  vector<lower=0,upper=3>[nsub] b_beta;
+  vector<lower=0,upper=1>[nsub] o_vwin;
+  vector<lower=0,upper=1>[nsub] o_vloss;
+  vector<lower=0,upper=1>[nsub] o_omegaone;
+  vector<lower=0,upper=3>[nsub] o_beta;
+  vector<lower=0,upper=1>[nsub] y_vwin;
+  vector<lower=0,upper=1>[nsub] y_vloss;
+  vector<lower=0,upper=1>[nsub] y_omegaone;
+  vector<lower=0,upper=3>[nsub] y_beta;
 }
 
 model {
@@ -43,10 +59,24 @@ model {
     vector[ntrial] omega;
 
     // Subject-level parameters 
-    vwin[i]    ~ normal(mu_vwin, sigma[1]);
-    vloss[i]   ~ normal(mu_vloss, sigma[2]);
-    omegaone[i] ~ normal(mu_omegaone, sigma[3]); 
-    beta[i]    ~ normal(mu_beta, sigma[4]);
+    b_vwin[i]    ~ normal(b_mu_vwin, sigma[1]);
+    b_vloss[i]   ~ normal(b_mu_vloss, sigma[2]);
+    b_omegaone[i] ~ normal(b_mu_omegaone, sigma[3]); 
+    b_beta[i]    ~ normal(b_mu_beta, sigma[4]);
+    o_vwin[i]    ~ normal(o_mu_vwin, sigma[1]);
+    o_vloss[i]   ~ normal(o_mu_vloss, sigma[2]);
+    o_omegaone[i] ~ normal(o_mu_omegaone, sigma[3]); 
+    o_beta[i]    ~ normal(o_mu_beta, sigma[4]);
+    y_vwin[i]    ~ normal(y_mu_vwin, sigma[1]);
+    y_vloss[i]   ~ normal(y_mu_vloss, sigma[2]);
+    y_omegaone[i] ~ normal(y_mu_omegaone, sigma[3]); 
+    y_beta[i]    ~ normal(y_mu_beta, sigma[4]);
+
+
+    // blue is 1
+    // orange is 2
+    // yellow is 3
+
 
     for (k in 1:ntrial) {
 
@@ -70,7 +100,16 @@ model {
     }
   }
 }
-// 
+
+
+
+
+
+
+
+
+
+
 // generated quantities {
 //   // Log-likelihood for model fit
 //   array[nsub] real log_lik;
