@@ -103,17 +103,20 @@ model {
         real beta_i;
         
         // conditional color selection
-        if (color_id[i, k] == 1) {
+            // blue is 1
+            // orange is 2
+            // yellow is 3
+        if (balloon_color[i, k] == 1) {
           vwin_i = b_vwin[i];
           vloss_i = b_vloss[i];
           omegaone_i = b_omegaone[i];
           beta_i = b_beta[i];
-        } else if (color_id[i, k] == 2) {
+        } else if (balloon_color[i, k] == 2) {
           vwin_i = o_vwin[i];
           vloss_i = o_vloss[i];
           omegaone_i = o_omegaone[i];
           beta_i = o_beta[i];
-        } else {
+        } else if (balloon_color[i, k] == 3) {
           vwin_i = y_vwin[i];
           vloss_i = y_vloss[i];
           omegaone_i = y_omegaone[i];
