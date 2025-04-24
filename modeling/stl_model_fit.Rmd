@@ -160,7 +160,6 @@ print(cat("sanity check # of trials per person: ", ((nrow(df_blue_low_spq))/(len
 
 ```
 
-
 ```{CAPS Groups}
 
 quantiles <- quantile(df_blue$caps_total, probs = c(0.1, 0.9), na.rm = TRUE)
@@ -224,6 +223,13 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
   opportunity <- npumps + (1 - outcome)
   maxpump <- max(nmax)
   
+  # map balloon color to numbers for stan
+  # blue = 1
+  # orange = 2
+  # yellow = 3
+  df$balloon_color_num <- match(df$balloon_color, c("b", "o", "y"))
+  balloon_color <- matrix(df$balloon_color_num, nrow = nsub, ncol = ntrial, byrow = TRUE)
+  
   d <- array(75, dim = c(nsub, ntrial, maxpump))
   for (i in 1:nsub) {
     for (j in 1:ntrial) {
@@ -247,6 +253,7 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
     opportunity = opportunity,
     maxpump = maxpump,
     d = d,
+    balloon_color = balloon_color,
     sub_ids = sub_ids  # including participant ids for tracking in stan summary
   )
 
@@ -283,8 +290,8 @@ run_stan_fit <- function(data, fit_name = "default") {
     fit <- sampling(
       mod,
       data = data,          # stan data
-      iter = 3000,          # iterations total
-      warmup = 1000,        # how many burn in out of total
+      iter = 500,          # iterations total
+      warmup = 500,        # how many burn in out of total
       save_warmup = TRUE,
       chains = 4,           # number of chains
       seed = 10191998,      # (it is my birthday in MM-DD-YYYY btw)
