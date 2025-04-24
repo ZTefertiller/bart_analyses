@@ -1,6 +1,6 @@
 // The Scaled Target Learning Model
 // Hierarchical model
-
+// For 3 colors and a reversal
 
 data {
   int<lower=1> nsub;
@@ -21,22 +21,32 @@ data {
 
 parameters {
   // group-level parameters by color
-  real<lower=0> b_mu_vwin;
-  real<lower=0> b_mu_vloss;
+  real<lower=0> b_mu_vwin_pre;
+  real<lower=0> b_mu_vloss_pre;
   real<lower=0,upper=1> b_mu_omegaone;
   real<lower=0> b_mu_beta;
+  real<lower=0> b_mu_vwin_post;
+  real<lower=0> b_mu_vloss_post;
+  
+  real<lower=0> o_mu_vwin_pre;
+  real<lower=0> o_mu_vloss_pre;
+  real<lower=0,upper=1> o_mu_omegaone;
+  real<lower=0> o_mu_beta;
+  real<lower=0> o_mu_vwin_post;
+  real<lower=0> o_mu_vloss_post;
   
   real<lower=0> y_mu_vwin;
   real<lower=0> y_mu_vloss;
   real<lower=0,upper=1> y_mu_omegaone;
   real<lower=0> y_mu_beta;
   
-  real<lower=0> o_mu_vwin;
-  real<lower=0> o_mu_vloss;
-  real<lower=0,upper=1> o_mu_omegaone;
-  real<lower=0> o_mu_beta;
-
-  vector<lower=0>[4] sigma;
+  
+  
+  // need different sigma for each color and for pre and post reversal on b/o
+  // 1-6 Blue (vwin_pre, vloss_pre, omegaone, beta, vwin_post, vloss_post)
+  // 7-12 Orange (vwin_pre, vloss_pre, omegaone, beta, vwin_post, vloss_post)
+  // 13-16 Yellow (vwin, vloss, omegaone, beta )
+  vector<lower=0>[16] sigma;
   
 
   // subject level parameters by color
@@ -58,15 +68,19 @@ parameters {
 
 model {
   //priors
-  b_mu_vwin  ~ normal(0, 1);
-  b_mu_vloss  ~ normal(0, 1);
+  b_mu_vwin_pre  ~ normal(0, 1);
+  b_mu_vloss_pre  ~ normal(0, 1);
   b_mu_omegaone  ~ normal(0, 1);
   b_mu_beta  ~ normal(0, 1);
+  b_mu_vwin_post  ~ normal(0, 1);
+  b_mu_vloss_post  ~ normal(0, 1);
   
-  o_mu_vwin  ~ normal(0, 1);
-  o_mu_vloss  ~ normal(0, 1);
+  o_mu_vwin_pre  ~ normal(0, 1);
+  o_mu_vloss_pre  ~ normal(0, 1);
   o_mu_omegaone  ~ normal(0, 1);
   o_mu_beta  ~ normal(0, 1);
+  o_mu_vwin_post  ~ normal(0, 1);
+  o_mu_vloss_post  ~ normal(0, 1);
 
   y_mu_vwin  ~ normal(0, 1);
   y_mu_vloss  ~ normal(0, 1);
@@ -80,18 +94,25 @@ model {
     vector[ntrial] omega;
 
     // Subject-level parameters 
-    b_vwin[i]    ~ normal(b_mu_vwin, sigma[1]);
-    b_vloss[i]   ~ normal(b_mu_vloss, sigma[2]);
+    // vwin vloss pre and post reversal
+    b_vwin_pre[i]    ~ normal(b_mu_vwin_pre, sigma[1]);
+    b_vloss_pre[i]   ~ normal(b_mu_vloss_pre, sigma[2]);
     b_omegaone[i] ~ normal(b_mu_omegaone, sigma[3]); 
     b_beta[i]    ~ normal(b_mu_beta, sigma[4]);
-    o_vwin[i]    ~ normal(o_mu_vwin, sigma[1]);
-    o_vloss[i]   ~ normal(o_mu_vloss, sigma[2]);
-    o_omegaone[i] ~ normal(o_mu_omegaone, sigma[3]); 
-    o_beta[i]    ~ normal(o_mu_beta, sigma[4]);
-    y_vwin[i]    ~ normal(y_mu_vwin, sigma[1]);
-    y_vloss[i]   ~ normal(y_mu_vloss, sigma[2]);
-    y_omegaone[i] ~ normal(y_mu_omegaone, sigma[3]); 
-    y_beta[i]    ~ normal(y_mu_beta, sigma[4]);
+    b_vwin_post[i]    ~ normal(b_mu_vwin_post, sigma[5]);
+    b_vloss_post[i]   ~ normal(b_mu_vloss_post, sigma[6]);
+    
+    o_vwin_pre[i]    ~ normal(o_mu_vwin_pre, sigma[7]);
+    o_vloss_pre[i]   ~ normal(o_mu_vloss_pre, sigma[8]);
+    o_omegaone[i] ~ normal(o_mu_omegaone, sigma[9]); 
+    o_beta[i]    ~ normal(o_mu_beta, sigma[10]);
+    o_vwin_post[i]    ~ normal(o_mu_vwin_post, sigma[11]);
+    o_vloss_post[i]   ~ normal(o_mu_vloss_post, sigma[12]);
+    
+    y_vwin[i]    ~ normal(y_mu_vwin, sigma[13]);
+    y_vloss[i]   ~ normal(y_mu_vloss, sigma[14]);
+    y_omegaone[i] ~ normal(y_mu_omegaone, sigma[15]); 
+    y_beta[i]    ~ normal(y_mu_beta, sigma[16]);
 
 
     for (k in 1:ntrial) {
@@ -122,6 +143,8 @@ model {
           omegaone_i = y_omegaone[i];
           beta_i = y_beta[i];
         }
+
+
 
       if (k < 2){
           omega[k] = nmax[i, k] * omegaone_i;
