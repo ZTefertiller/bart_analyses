@@ -110,7 +110,6 @@ df_yellow <- df %>%
   arrange(participant_id,trial_number)
 ```
 
-
 ```{SPQ Groups}
 
 # quantiles <- quantile(df_blue$spq_total_score, probs = c(0.1, 0.9), na.rm = TRUE)
@@ -275,7 +274,7 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
 
 
 ```{r loading stan parameters}
-stan_data_blue <- create_stl_stan_params(df_blue)
+stl_stan_data <- create_stl_stan_params(df)
 ```
 
 
@@ -307,24 +306,6 @@ run_stan_fit <- function(data, fit_name = "default") {
 ```
 
 
-```{r}
-blue_stl_all <- run_stan_fit(stan_data_blue)
-```
-
-
-```{r}
- 
-blue_high_spq <- run_stan_fit(stan_data_blue_high_spq, "blue_high_spq")
-blue_low_spq <- run_stan_fit(stan_data_blue_low_spq, "blue_low_spq")
-orange_high_spq <- run_stan_fit(stan_data_orange_high_spq, "orange_high_spq")
-orange_low_spq <- run_stan_fit(stan_data_orange_low_spq, "orange_low_spq")
-yellow_high_spq <- run_stan_fit(stan_data_yellow_high_spq, "yellow_high_spq")
-yellow_low_spq <- run_stan_fit(stan_data_yellow_low_spq, "yellow_low_spq")
-
-```
-
-
-# get_draws()
 ```{r load function: extract draws}
 get_draws <- function(fit, include_questionnaires = FALSE, extra_parameters = NULL) {
   if (include_questionnaires) {
