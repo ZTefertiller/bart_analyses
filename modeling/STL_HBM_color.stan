@@ -41,8 +41,8 @@ parameters {
   real<lower=0> y_mu_beta;
   
   
-  
-  // need different sigma for each color and for pre and post reversal on b/o
+  // need different variance term for each parameter
+  // sigma is a vector of those variance terms
   // 1-6 Blue (vwin_pre, vloss_pre, omegaone, beta, vwin_post, vloss_post)
   // 7-12 Orange (vwin_pre, vloss_pre, omegaone, beta, vwin_post, vloss_post)
   // 13-16 Yellow (vwin, vloss, omegaone, beta )
