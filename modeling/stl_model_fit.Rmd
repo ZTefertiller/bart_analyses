@@ -74,7 +74,7 @@ df_questionnaires <- df %>%
     phq_total = first(phq_total),  
     mdq_total = first(mdq_total),
     ppgm_total = first(ppgm_total),
-    ipip_total = first(ipip_total_score),
+    ipip_total = first(ipip_total_score)
     
   ) %>%
   mutate(
@@ -289,8 +289,8 @@ run_stan_fit <- function(data, fit_name = "default") {
     fit <- sampling(
       mod,
       data = data,          # stan data
-      iter = 500,          # iterations total
-      warmup = 500,        # how many burn in out of total
+      iter = 50,          # iterations total
+      warmup = 25,        # how many burn in out of total
       save_warmup = TRUE,
       chains = 4,           # number of chains
       seed = 10191998,      # (it is my birthday in MM-DD-YYYY btw)
