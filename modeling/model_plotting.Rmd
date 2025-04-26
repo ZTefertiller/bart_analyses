@@ -58,6 +58,95 @@ traceplot_params <- mcmc_trace(draws, pars = c("mu_vwin", "mu_vloss", "mu_omegao
 }
 ```
 
+```{r}
+# -------------------------------------------------------------------
+# Trace plot for ALL group-level parameters in the scaled-target model
+# -------------------------------------------------------------------
+library(bayesplot)   # mcmc_trace()
+library(ggplot2)
+library(stringr)     # str_replace_all()
+
+plot_group_trace_all <- function(fit_obj,
+                                 warmup = NULL,
+                                 iter   = NULL,
+                                 save_to = "~/Desktop") {
+  
+  ## 1. basic housekeeping  -----------------------------------------
+  fit_name <- deparse(substitute(fit_obj))
+  warmup   <- fit_obj@sim$warmup
+  iter_post <- fit_obj@sim$iter               # post-warm-up only
+  iter_tot  <- warmup + iter_post             # ← 2000 in your run
+  
+  message("Warm-up iterations: ", warmup)
+  message("Post-warm-up iterations: ", iter_post)
+  message("Total stored iterations: ", iter_tot)
+  
+    
+  ## 2. pull the parameter names we care about ----------------------
+  all_pars <- fit_obj@sim$pars_oi              # character vector
+  group_pars <- grep("^[boy]_mu_", all_pars, value = TRUE)
+  
+  if (length(group_pars) == 0)
+    stop("Couldn’t find any parameters named b_mu_ / o_mu_ / y_mu_…",
+         call. = FALSE)
+  
+  ## 3. helper: prettify labels -------------------------------------
+    nice_label <- function(x) {
+      x <- str_replace_all(x, "^b_",  "Blue ")
+      x <- str_replace_all(x, "^o_",  "Orange ")
+      x <- str_replace_all(x, "^y_",  "Yellow ")
+      x <- str_replace_all(x, "mu_",  "")
+      x <- str_replace_all(x, "_omegaone", " ω₁")
+      x <- str_replace_all(x, "_beta",     " β")
+      x <- str_replace_all(x, "_vwin",     " v-win")
+      x <- str_replace_all(x, "_vloss",    " v-loss")
+      x <- str_replace_all(x, "_pre$",     " (pre)")
+      x <- str_replace_all(x, "_post$",    " (post)")
+      x <- str_replace_all(x, "_",         " ")
+      x
+    }
+
+  labeller_vec <- setNames(vapply(group_pars, nice_label, ""), group_pars)
+  
+  ## 4. pull draws & make trace plot --------------------------------
+  color_scheme_set(c("#BF6CAF", "#80384B", "#FF595E",
+                   "#404A9C", "#7F7EFF", "#011638"))
+
+draws <- rstan::extract(
+           fit_obj,
+           pars       = group_pars,
+           permuted   = FALSE,   # (iter × chain × param)
+           inc_warmup = TRUE
+         )                       # ← no duplication here
+
+tr <- mcmc_trace(
+        draws,
+        pars       = group_pars,
+        facet_args = list(ncol = 4),
+        np_style   = trace_style_np(),
+        n_warmup   = warmup
+      ) +
+      facet_wrap(~parameter,
+                 scales   = "free_y",
+                 ncol     = 4,
+                 labeller = as_labeller(labeller_vec)) +
+      labs(title = "Group-level parameter traces") +
+      theme(
+        panel.spacing = unit(3, "lines"),
+        plot.title    = element_text(hjust = 0.5),
+        text          = element_text(family = "Courier New", face = "bold")
+      ) +
+      scale_x_continuous(limits = c(0, iter_tot))
+  
+  ## 5. save and return --------------------------------------------
+  outfile <- file.path(save_to, paste0(fit_name, "_group_trace.png"))
+  ggsave(outfile, tr, dpi = 500, width = 10, height = 8, bg = "white")
+  
+  message("Saved → ", outfile)
+  tr
+}
+
+```
 
 ```{r}
 vwin_vloss_reversal <- function(group1, group2, color) {
@@ -244,7 +333,98 @@ ggplot(df_plot, aes(x = trial, y = omega, color = color)) +
 ```
 
 
+```{r}
+# -------------------------------------------------------------------
+# Trace plot for ALL group-level μ-parameters in the scaled-target model
+# -------------------------------------------------------------------
+library(bayesplot)
+library(ggplot2)
+library(stringr)
 
+plot_group_trace_all <- function(fit_obj,
+                                 warmup = fit_obj@sim$warmup,
+                                 mask   = warmup,      # how many draws to ignore for y-range
+                                 drop_x_mask = FALSE,  # TRUE → x starts right after 'mask'
+                                 save_to = "~/Desktop") {
+
+  ## bookkeeping ----------------------------------------------------
+  iter_post <- fit_obj@sim$iter
+  iter_tot  <- warmup + iter_post
+  message("Warm-up iterations:  ", warmup)
+  message("Post-warm-up iters:  ", iter_post)
+  message("Total stored iters:  ", iter_tot)
+
+  ## parameter names ------------------------------------------------
+  group_pars <- grep("^[boy]_mu_", fit_obj@sim$pars_oi, value = TRUE)
+  stopifnot(length(group_pars) > 0)
+
+  ## nice labels ----------------------------------------------------
+  nice_label <- function(x) {
+    x <- str_replace_all(x, "^b_",  "Blue ")
+    x <- str_replace_all(x, "^o_",  "Orange ")
+    x <- str_replace_all(x, "^y_",  "Yellow ")
+    x <- str_replace_all(x, "mu_",  "")
+    x <- str_replace_all(x, "_omegaone", " ω₁")
+    x <- str_replace_all(x, "_beta",     " β")
+    x <- str_replace_all(x, "_vwin",     " v-win")
+    x <- str_replace_all(x, "_vloss",    " v-loss")
+    x <- str_replace_all(x, "_pre$",     " (pre)")
+    x <- str_replace_all(x, "_post$",    " (post)")
+    str_replace_all(x, "_", " ")
+  }
+  labeller_vec <- setNames(vapply(group_pars, nice_label, ""), group_pars)
+
+  ## draws ----------------------------------------------------------
+  draws_full <- rstan::extract(
+               fit_obj,
+               pars       = group_pars,
+               permuted   = FALSE,
+               inc_warmup = TRUE
+             )
+
+  draws <- draws_full                             # copy
+  if (mask > 0) {
+    keep_row <- mask + 1                          # first row *after* mask
+    draws[seq_len(mask), , ] <- draws_full[keep_row, , ]
+    # now the first `mask` rows are flat lines at a realistic value
+  }
+  ## build trace plot ----------------------------------------------
+  color_scheme_set(c("#BF6CAF", "#80384B", "#FF595E",
+                     "#404A9C", "#7F7EFF", "#011638"))
+
+  tr <- mcmc_trace(
+          draws,
+          pars       = group_pars,
+          facet_args = list(ncol = 4),
+          np_style   = trace_style_np(),
+          n_warmup   = warmup
+        ) +
+        facet_wrap(~parameter,
+                   scales   = "free_y",
+                   ncol     = 4,
+                   labeller = as_labeller(labeller_vec)) +
+        labs(title = "Group-level parameter traces") +
+        theme(
+          panel.spacing = unit(3, "lines"),
+          plot.title    = element_text(hjust = 0.5),
+          text          = element_text(family = "Courier New", face = "bold")
+        )
+
+  # x-axis range
+  if (drop_x_mask) {
+    tr <- tr + scale_x_continuous(limits = c(mask, iter_tot))
+  } else {
+    tr <- tr + scale_x_continuous(limits = c(0, iter_tot))
+  }
+
+  ## save and return ------------------------------------------------
+  outfile <- file.path(save_to,
+                       paste0(deparse(substitute(fit_obj)), "_group_trace.png"))
+  ggsave(outfile, tr, dpi = 500, width = 10, height = 8, bg = "white")
+  message("Saved → ", outfile)
+  tr
+}
+```
 
 
 
