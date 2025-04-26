@@ -246,6 +246,9 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
     }
   }
   
+  #going back over NA values with 75 as placeholder because stan doesnt like NA
+  d[is.na(d)] <- 75
+  
   stan_data <- list(
     nsub = nsub,
     ntrial = ntrial,
@@ -382,6 +385,13 @@ param_extract <- function(fit, sub_ids,
 }
 ```
 
+```{r get omega}
+omega_out_samples <- rstan::extract(fit, pars = "omega_out")$omega_out
+# posterior mean predicted inflations per subject and trial
+omega_out_mean <- apply(omega_out_samples, c(2, 3), mean)
+# Example: omega values for participant 1
+omega_out_mean[1, ]
+```
 
 ```{r}
 blue_sum <- summarize_stanfit(blue_stl_all)

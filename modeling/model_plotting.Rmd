@@ -201,7 +201,21 @@ ggsave(filename = "/Users/zachtefertiller/Desktop/STL_mcmc/2000_all_participants
 ```
 
 
+```{r}
 
+df_plot <- data.frame(
+  trial = 1:180,
+  omega = omega_out_mean[1, ]
+)
+
+ggplot(df_plot, aes(x = trial, y = omega)) +
+  geom_line() +
+  labs(title = "Predicted Omega Across Trials (Participant 1)",
+       x = "Trial", y = "Omega") +
+  theme_minimal()
+
+
+```
 
 
 
