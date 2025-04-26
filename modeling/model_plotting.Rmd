@@ -215,6 +215,32 @@ ggplot(df_plot, aes(x = trial, y = omega)) +
   theme_minimal()
 
 
+balloon_colors <- stl_stan_data$balloon_color
+
+
+participant_id <- 1
+
+# Make a dataframe for plotting
+df_plot <- data.frame(
+  trial = 1:180,
+  omega = omega_out_mean[participant_id, ],
+  color = factor(balloon_colors[participant_id, ],
+                 levels = c(1,2,3),
+                 labels = c("Blue", "Orange", "Yellow"))
+)
+
+# Now plot
+ggplot(df_plot, aes(x = trial, y = omega, color = color)) +
+  geom_point(size = 2) +
+  labs(
+    title = paste("Predicted Omega Across Trials (Participant", participant_id, ")"),
+    x = "Trial",
+    y = "Omega",
+    color = "Balloon Color"
+  ) +
+  theme_minimal() +
+  scale_color_manual(values = c("blue", "orange", "yellow"))
+
 ```
 
 
