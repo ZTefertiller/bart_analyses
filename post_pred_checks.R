@@ -1,6 +1,6 @@
 stl_post_pred <- function(participant_data) {
   ntrials <- nrow(participant_data)
-  nmax <- participant_data$optimal_inflations
+  nmax <- participant_data$color_max
   vwin <- participant_data$vwin[1]
   vloss <- participant_data$vloss[1]
   omegaone <- participant_data$omegaone[1]

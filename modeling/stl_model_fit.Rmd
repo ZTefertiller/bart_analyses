@@ -386,7 +386,7 @@ param_extract <- function(fit, sub_ids,
 ```
 
 ```{r get omega}
-omega_out_samples <- rstan::extract(full_test_colors, pars = "omega_out")$omega_out
+omega_out_samples <- rstan::extract(fit, pars = "omega_out")$omega_out
 # posterior mean predicted inflations per subject and trial
 omega_out_mean <- apply(omega_out_samples, c(2, 3), mean)
 # Example: omega values for participant 1
