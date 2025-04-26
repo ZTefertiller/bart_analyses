@@ -219,6 +219,8 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
   outcome   <- matrix(df$popped, nrow = nsub, ncol = ntrial, byrow = TRUE)
   npumps    <- matrix(df$inflations, nrow = nsub, ncol = ntrial, byrow = TRUE)
   nmax <- matrix(df$color_max, nrow = nsub, ncol = ntrial, byrow = TRUE)
+  # think of nmax as "how far could you possibly pump if the balloon didn't pop earlier?"
+  # it is the upper bound of the uniform distribution that burst points were sampled from
   opportunity <- npumps + (1 - outcome)
   maxpump <- max(nmax)
   
@@ -229,7 +231,8 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
   df$balloon_color_num <- match(df$balloon_color, c("b", "o", "y"))
   balloon_color <- matrix(df$balloon_color_num, nrow = nsub, ncol = ntrial, byrow = TRUE)
   
-  d <- array(75, dim = c(nsub, ntrial, maxpump))
+  #maxpump is for the size of the opportunity array for stan indexing
+  d <- array(NA, dim = c(nsub, ntrial, maxpump))
   for (i in 1:nsub) {
     for (j in 1:ntrial) {
       pumps <- npumps[i, j]
