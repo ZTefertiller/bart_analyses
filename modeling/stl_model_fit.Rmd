@@ -218,7 +218,7 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
   ntrial <- nrow(df) / nsub
   outcome   <- matrix(df$popped, nrow = nsub, ncol = ntrial, byrow = TRUE)
   npumps    <- matrix(df$inflations, nrow = nsub, ncol = ntrial, byrow = TRUE)
-  nmax <- matrix(df$optimal_inflations, nrow = nsub, ncol = ntrial, byrow = TRUE)
+  nmax <- matrix(df$color_max, nrow = nsub, ncol = ntrial, byrow = TRUE)
   opportunity <- npumps + (1 - outcome)
   maxpump <- max(nmax)
   
