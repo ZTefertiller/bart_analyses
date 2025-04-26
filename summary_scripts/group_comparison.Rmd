@@ -1,0 +1,28 @@
+---
+title: "group_comparison"
+author: "Zach Tefertiller"
+date: "2025-04-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+caps_quantiles <- quantile(df$caps_total, probs = c(0.1, 0.9), na.rm = TRUE)
+
+caps_bottom_cutoff <- quantiles[1]
+caps_top_cutoff <- quantiles[2]
+
+mean_caps <- mean(df$caps_total, na.rm = TRUE)
+sd_caps  <- sd(df$caps_total, na.rm = TRUE)
+
+spq_quantiles <- quantile(df$spq_total, probs = c(0.1, 0.9), na.rm = TRUE)
+
+spq_bottom_cutoff <- quantiles[1]
+spq_top_cutoff <- quantiles[2]
+
+mean_spq <- mean(df$spq_total, na.rm = TRUE)
+sd_spq  <- sd(df$spq_total, na.rm = TRUE)
+```
