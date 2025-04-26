@@ -50,13 +50,17 @@ parameters {
   
 
   // subject level parameters by color
-  vector<lower=0,upper=1>[nsub] b_vwin;
-  vector<lower=0,upper=1>[nsub] b_vloss;
+  vector<lower=0,upper=1>[nsub] b_vwin_pre;
+  vector<lower=0,upper=1>[nsub] b_vwin_post;
+  vector<lower=0,upper=1>[nsub] b_vloss_pre;
+  vector<lower=0,upper=1>[nsub] b_vloss_post;
   vector<lower=0,upper=1>[nsub] b_omegaone;
   vector<lower=0,upper=3>[nsub] b_beta;
   
-  vector<lower=0,upper=1>[nsub] o_vwin;
-  vector<lower=0,upper=1>[nsub] o_vloss;
+  vector<lower=0,upper=1>[nsub] o_vwin_pre;
+  vector<lower=0,upper=1>[nsub] o_vwin_post;
+  vector<lower=0,upper=1>[nsub] o_vloss_pre;
+  vector<lower=0,upper=1>[nsub] o_vloss_post;
   vector<lower=0,upper=1>[nsub] o_omegaone;
   vector<lower=0,upper=3>[nsub] o_beta;
   
@@ -89,11 +93,14 @@ model {
   
   sigma ~ inv_gamma(1, 1);
   
-  //likelihood
+  // subject-level parameters 
   for (i in 1:nsub) {
-    vector[ntrial] omega;
+    
+    // separate omegas for colors
+    vector[ntrial] omega_blue;
+    vector[ntrial] omega_orange;
+    vector[ntrial] omega_yellow;
 
-    // Subject-level parameters 
     // vwin vloss pre and post reversal
     b_vwin_pre[i]    ~ normal(b_mu_vwin_pre, sigma[1]);
     b_vloss_pre[i]   ~ normal(b_mu_vloss_pre, sigma[2]);
@@ -117,59 +124,123 @@ model {
 
     for (k in 1:ntrial) {
       
-        // placeholders so that it can select by color and index conditionally
-        real vwin_i;
-        real vloss_i;
-        real omegaone_i;
-        real beta_i;
+      // placeholders so that it can select by color and index conditionally
+      real vwin_i;
+      real vloss_i;
+      real omegaone_i;
+      real beta_i;
+      real omega_k;
         
-        // conditional color selection
-            // blue is 1
-            // orange is 2
-            // yellow is 3
-        if (balloon_color[i, k] == 1) {
-          vwin_i = b_vwin[i];
-          vloss_i = b_vloss[i];
-          omegaone_i = b_omegaone[i];
-          beta_i = b_beta[i];
-        } else if (balloon_color[i, k] == 2) {
-          vwin_i = o_vwin[i];
-          vloss_i = o_vloss[i];
-          omegaone_i = o_omegaone[i];
-          beta_i = o_beta[i];
-        } else if (balloon_color[i, k] == 3) {
-          vwin_i = y_vwin[i];
-          vloss_i = y_vloss[i];
-          omegaone_i = y_omegaone[i];
-          beta_i = y_beta[i];
+      // conditional color selection "k" in balloon_color
+          // blue is 1
+          // orange is 2
+          // yellow is 3
+          // orange and blue are switching average burst point at trial 91
+            
+            
+      // blue
+      if (balloon_color[i, k] == 1) {  
+    
+        // learning rates pre/post reversal 
+        if (k < 91) {
+          vwin_i = b_vwin_pre[i];
+          vloss_i = b_vloss_pre[i];
+        } else {
+          vwin_i = b_vwin_post[i];
+          vloss_i = b_vloss_post[i];
         }
+        
+        // parameters for trial number 1 and beta values
+        omegaone_i = b_omegaone[i];
+        beta_i = b_beta[i];
 
-
-
-      if (k < 2){
-          omega[k] = nmax[i, k] * omegaone_i;
-        }
-  
-        else{
-          if (outcome[i, k-1] == 1) {
-            omega[k] = nmax[i, k] * ((omega[k-1] / nmax[i, k]) * 
-                      (1 - (vloss_i * (1 - (npumps[i, k-1] * 1.0 / nmax[i, k])))));
-          } else {
-            omega[k] = nmax[i, k] * ((omega[k-1] / nmax[i, k]) * 
-                      (1 + (vwin_i * (npumps[i, k-1] * 1.0 / nmax[i, k]))));
+        if (k == 1) { // first trial
+        omega_blue[k] = nmax[i, k] * omegaone_i;
+        
+        } else if (balloon_color[i, k-1] == 1) {
+          if (outcome[i, k-1] == 1) { // popped trial k-1
+            omega_blue[k] = nmax[i, k] * ((omega_blue[k-1] / nmax[i, k]) * (1 - (vloss_i * (1 - (npumps[i, k-1] * 1.0 / nmax[i, k])))));
+          } else { // collected trial k-1
+            omega_blue[k] = nmax[i, k] * ((omega_blue[k-1] / nmax[i, k]) * (1 + (vwin_i * (npumps[i, k-1] * 1.0 / nmax[i, k]))));
           }
+          
+        } else {
+          omega_blue[k] = nmax[i, k] * omegaone_i; // reset if color switched from last trial
         }
-  
-        for (n in 1:opportunity[i,k]) {
-          d[i,k,n] ~ bernoulli_logit(-beta_i * (n - omega[k]));
+        omega_k = omega_blue[k];
+      }
+
+
+
+      // orange 
+      else if (balloon_color[i, k] == 2) {  
+        
+        // learning rates pre/post reversal
+        if (k < 91) {
+          vwin_i = o_vwin_pre[i];
+          vloss_i = o_vloss_pre[i];
+        } else {
+          vwin_i = o_vwin_post[i];
+          vloss_i = o_vloss_post[i];
         }
+        
+        omegaone_i = o_omegaone[i];
+        beta_i = o_beta[i];
+        
+        if (k == 1) { // first trial
+          omega_orange[k] = nmax[i, k] * omegaone_i;
+          
+        } else if (balloon_color[i, k-1] == 2) {
+          if (outcome[i, k-1] == 1) { // popped
+            omega_orange[k] = nmax[i, k] * ((omega_orange[k-1] / nmax[i, k]) * (1 - (vloss_i * (1 - (npumps[i, k-1] * 1.0 / nmax[i, k])))));
+          } else { // collected
+            omega_orange[k] = nmax[i, k] * ((omega_orange[k-1] / nmax[i, k]) * (1 + (vwin_i * (npumps[i, k-1] * 1.0 / nmax[i, k]))));
+          }
+          
+        } else {
+          omega_orange[k] = nmax[i, k] * omegaone_i;
+        }
+        omega_k = omega_orange[k];
+      }
+
+
+
+      // yellow
+      else if (balloon_color[i, k] == 3) {  
+        
+        // single learning rate for yellow as contingencies don't change
+        vwin_i = y_vwin[i];
+        vloss_i = y_vloss[i];
+        omegaone_i = y_omegaone[i];
+        beta_i = y_beta[i];
+      
+      // first trial
+      if (k == 1) {
+        omega_yellow[k] = nmax[i, k] * omegaone_i;
+        
+      } else if (balloon_color[i, k-1] == 3) {
+        if (outcome[i, k-1] == 1) { // popped
+          omega_yellow[k] = nmax[i, k] * ((omega_yellow[k-1] / nmax[i, k]) * (1 - (vloss_i * (1 - (npumps[i, k-1] * 1.0 / nmax[i, k])))));
+        } else { // collected
+          omega_yellow[k] = nmax[i, k] * ((omega_yellow[k-1] / nmax[i, k]) * (1 + (vwin_i * (npumps[i, k-1] * 1.0 / nmax[i, k]))));
+        }
+        
+      } else {
+        omega_yellow[k] = nmax[i, k] * omegaone_i;
+      }
+      omega_k = omega_yellow[k];
+    }
+    
+    
+    // finally, step 2, our bernoulli decision likelihood for the trial
+      for (n in 1:opportunity[i, k]) {
+        // remember at top, d is [participant, trial number, pump number]
+        // omega_k was selected from the previous entry in the relevant omega color index
+        d[i, k, n] ~ bernoulli_logit(-beta_i * (n - omega_k));
       }
     }
   }
-
-
-
-
+}
 
 
 
