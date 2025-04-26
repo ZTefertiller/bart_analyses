@@ -8,7 +8,7 @@ data {
   array[nsub, ntrial] int<lower=0, upper=1> outcome;
   array[nsub, ntrial] int<lower=0> npumps;
   array[nsub, ntrial] int<lower=1> opportunity;
-  array[nsub, ntrial] int nmax;  // trial-specific maximum values
+  array[nsub, ntrial] int nmax;  // color-specific maximum values
   int<lower=1> maxpump;  // overall maximum pump opportunity (e.g., 128)
   array[nsub, ntrial] int<lower=1, upper=3> balloon_color;
     // blue is 1
