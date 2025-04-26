@@ -243,7 +243,119 @@ model {
 }
 
 
+// not saving y_pred as it is way too large. will simulate PPCs post model fitting
+// saving log_lik for LOOIC
+// saving omega_out for model output inflations per participant
 
+generated quantities {
+  
+  array[nsub, ntrial] real omega_out;
+  array[nsub] real log_lik;
+
+  // same exact logic as in model
+  for (i in 1:nsub) {
+    vector[ntrial] omega_blue;
+    vector[ntrial] omega_orange;
+    vector[ntrial] omega_yellow;
+    for (k in 1:ntrial) {
+      real vwin_i;
+      real vloss_i;
+      real omegaone_i;
+      real beta_i;
+      real omega_k;
+            
+      // blue
+      if (balloon_color[i, k] == 1) {  
+        if (k < 91) {
+          vwin_i = b_vwin_pre[i];
+          vloss_i = b_vloss_pre[i];
+        } else {
+          vwin_i = b_vwin_post[i];
+          vloss_i = b_vloss_post[i];
+        }
+        omegaone_i = b_omegaone[i];
+        beta_i = b_beta[i];
+
+        if (k == 1) { // first trial
+        omega_blue[k] = nmax[i, k] * omegaone_i;
+        
+        } else if (balloon_color[i, k-1] == 1) {
+          if (outcome[i, k-1] == 1) { // popped trial k-1
+            omega_blue[k] = nmax[i, k] * ((omega_blue[k-1] / nmax[i, k]) * (1 - (vloss_i * (1 - (npumps[i, k-1] * 1.0 / nmax[i, k])))));
+          } else { // collected trial k-1
+            omega_blue[k] = nmax[i, k] * ((omega_blue[k-1] / nmax[i, k]) * (1 + (vwin_i * (npumps[i, k-1] * 1.0 / nmax[i, k]))));
+          }
+          
+        } else {
+          omega_blue[k] = nmax[i, k] * omegaone_i;
+        }
+        omega_k = omega_blue[k];
+      }
+
+      // orange 
+      else if (balloon_color[i, k] == 2) {  
+        if (k < 91) {
+          vwin_i = o_vwin_pre[i];
+          vloss_i = o_vloss_pre[i];
+        } else {
+          vwin_i = o_vwin_post[i];
+          vloss_i = o_vloss_post[i];
+        }
+        
+        omegaone_i = o_omegaone[i];
+        beta_i = o_beta[i];
+        
+        if (k == 1) { // first trial
+          omega_orange[k] = nmax[i, k] * omegaone_i;
+          
+        } else if (balloon_color[i, k-1] == 2) {
+          if (outcome[i, k-1] == 1) { // popped
+            omega_orange[k] = nmax[i, k] * ((omega_orange[k-1] / nmax[i, k]) * (1 - (vloss_i * (1 - (npumps[i, k-1] * 1.0 / nmax[i, k])))));
+          } else { // collected
+            omega_orange[k] = nmax[i, k] * ((omega_orange[k-1] / nmax[i, k]) * (1 + (vwin_i * (npumps[i, k-1] * 1.0 / nmax[i, k]))));
+          }
+          
+        } else {
+          omega_orange[k] = nmax[i, k] * omegaone_i;
+        }
+        omega_k = omega_orange[k];
+      }
+
+      // yellow
+      else if (balloon_color[i, k] == 3) {  
+        vwin_i = y_vwin[i];
+        vloss_i = y_vloss[i];
+        omegaone_i = y_omegaone[i];
+        beta_i = y_beta[i];
+      
+      // first trial
+      if (k == 1) {
+        omega_yellow[k] = nmax[i, k] * omegaone_i;
+        
+      } else if (balloon_color[i, k-1] == 3) {
+        if (outcome[i, k-1] == 1) { // popped
+          omega_yellow[k] = nmax[i, k] * ((omega_yellow[k-1] / nmax[i, k]) * (1 - (vloss_i * (1 - (npumps[i, k-1] * 1.0 / nmax[i, k])))));
+        } else { // collected
+          omega_yellow[k] = nmax[i, k] * ((omega_yellow[k-1] / nmax[i, k]) * (1 + (vwin_i * (npumps[i, k-1] * 1.0 / nmax[i, k]))));
+        }
+        
+      } else {
+        omega_yellow[k] = nmax[i, k] * omegaone_i;
+      }
+      omega_k = omega_yellow[k];
+    }
+    
+    
+    // predicted inflations for participant i on trial k
+    omega_out[i, k] = omega_k;
+    
+    
+      for (n in 1:opportunity[i, k]) {
+        log_lik[i] += bernoulli_logit_lpmf(d[i, k, n] | -beta_i * (n - omega_k));
+      }
+    }
+  }
+}
 
 
 
