@@ -295,8 +295,8 @@ run_stan_fit <- function(data, fit_name = "default") {
     fit <- sampling(
       mod,
       data = data,          # stan data
-      iter = 50,          # iterations total
-      warmup = 25,        # how many burn in out of total
+      iter = 2000,          # iterations total
+      warmup = 1000,        # how many burn in out of total
       save_warmup = TRUE,
       chains = 4,           # number of chains
       seed = 10191998,      # (it is my birthday in MM-DD-YYYY btw)
@@ -386,7 +386,7 @@ param_extract <- function(fit, sub_ids,
 ```
 
 ```{r get omega}
-omega_out_samples <- rstan::extract(fit, pars = "omega_out")$omega_out
+omega_out_samples <- rstan::extract(full_test_colors, pars = "omega_out")$omega_out
 # posterior mean predicted inflations per subject and trial
 omega_out_mean <- apply(omega_out_samples, c(2, 3), mean)
 # Example: omega values for participant 1
@@ -398,4 +398,9 @@ blue_sum <- summarize_stanfit(blue_stl_all)
 blue_params <- param_extract(blue_stl_all, stan_data_blue$sub_ids)
 blue_merge <- left_join(df_blue, blue_params, by = "participant_id")
 blue_merge$opportunity <- with(blue_merge, inflations + (1 - popped))
+```
+
+
+```{r load fit}
+fit <- readRDS("/Users/zachtefertiller/Desktop/full_test_colors.rds")
 ```
