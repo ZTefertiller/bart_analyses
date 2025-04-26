@@ -254,6 +254,9 @@ generated quantities {
 
   // same exact logic as in model
   for (i in 1:nsub) {
+    
+    log_lik[i] = 0; // except initializing log likelihood 
+    
     vector[ntrial] omega_blue;
     vector[ntrial] omega_orange;
     vector[ntrial] omega_yellow;
