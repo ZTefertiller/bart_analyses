@@ -33,7 +33,7 @@ df <- dataset %>%
     balloon_color == 'b' & trial_number < 91 ~ 128,
     balloon_color == 'b' & trial_number >= 91 ~ 8
   ))
-
+df$opportunity <- df$inflations + (1 - df$popped)
 print_df_info <- function(df) {
   df_name <- deparse(substitute(df))
   number_of_participants <- length(unique(df$participant_id))
