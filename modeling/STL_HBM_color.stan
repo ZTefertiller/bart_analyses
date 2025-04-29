@@ -81,58 +81,93 @@ transformed parameters {
   array[nsub] vector[ntrial] omega_yellow;
 
   for (i in 1:nsub) {
+    // indices of the last trial of each color
+    int last_blue   = 0;
+    int last_orange = 0;
+    int last_yellow = 0;
+
     for (k in 1:ntrial) {
-      // blue
-      if (k == 1) {
-          omega_blue[i][k] = nmax[i,k] * b_omegaone[i];
-      } else if (balloon_color[i,k-1] != 1) { // if previous balloon wasn't blue
-          omega_blue[i][k] = omega_blue[i][k-1];
-      } else if (outcome[i,k-1] == 1) {          // popped
-        real vloss = (k < 91) ? b_vloss_pre[i] : b_vloss_post[i];  // reversal logic
-        omega_blue[i][k] = nmax[i,k] *
-            ( omega_blue[i][k-1] / nmax[i,k] ) *
-            ( 1 - vloss * (1 - (npumps[i,k-1] / nmax[i,k])) );
-      } else {                                   // collected
-        real vwin  = (k < 91) ? b_vwin_pre[i]  : b_vwin_post[i];  // reversal logic
-        omega_blue[i][k] = nmax[i,k] *
-            ( omega_blue[i][k-1] / nmax[i,k] ) *
-            ( 1 + vwin  * (npumps[i,k-1] / nmax[i,k]) );
+      // --- BLUE ---
+      if (balloon_color[i,k] == 1) {
+        if (last_blue == 0) {
+          // first-ever blue
+          omega_blue[i,k] = nmax[i,k] * b_omegaone[i];
+        } else {
+          // update from the last blue trial, but outcome from k-1
+          real vloss = (k < 91 ? b_vloss_pre[i]  : b_vloss_post[i]);
+          real vwin  = (k < 91 ? b_vwin_pre[i]   : b_vwin_post[i]);
+          if (outcome[i, last_blue] == 1) {
+            omega_blue[i,k] = nmax[i,k] *
+              (omega_blue[i,last_blue] / nmax[i,k]) *
+              (1 - vloss * (1 - npumps[i,last_blue] / nmax[i,k]));
+          } else {
+            omega_blue[i,k] = nmax[i,k] *
+              (omega_blue[i,last_blue] / nmax[i,k]) *
+              (1 + vwin  * (     npumps[i,last_blue] / nmax[i,k]));
+          }
+        }
+        last_blue = k;
+      } else {
+        // not blue → carry forward
+        if (k == 1)
+          omega_blue[i,k] = nmax[i,k] * b_omegaone[i];
+        else
+          omega_blue[i,k] = omega_blue[i,k-1];
       }
 
-      // orange
-      if (k == 1) {
-          omega_orange[i][k] = nmax[i,k] * o_omegaone[i];
-      } else if (balloon_color[i,k-1] != 2) { // if previous balloon wasn't orange
-          omega_orange[i][k] = omega_orange[i][k-1];
-      } else if (outcome[i,k-1] == 1) {          // popped
-        real vloss = (k < 91) ? o_vloss_pre[i] : o_vloss_post[i]; // reversal logic
-        omega_orange[i][k] = nmax[i,k] *
-            ( omega_orange[i][k-1] / nmax[i,k] ) *
-            ( 1 - vloss * (1 - (npumps[i,k-1] / nmax[i,k])) );
-      } else {                                   // collected
-        real vwin  = (k < 91) ? o_vwin_pre[i]  : o_vwin_post[i];  // reversal logic
-        omega_orange[i][k] = nmax[i,k] *
-            ( omega_orange[i][k-1] / nmax[i,k] ) *
-            ( 1 + vwin  * (npumps[i,k-1] / nmax[i,k]) );
+      // --- ORANGE ---
+      if (balloon_color[i,k] == 2) {
+        if (last_orange == 0) {
+          omega_orange[i,k] = nmax[i,k] * o_omegaone[i];
+        } else {
+          real vloss = (k < 91 ? o_vloss_pre[i]  : o_vloss_post[i]);
+          real vwin  = (k < 91 ? o_vwin_pre[i]   : o_vwin_post[i]);
+          if (outcome[i, last_orange] == 1) {
+            omega_orange[i,k] = nmax[i,k] *
+              (omega_orange[i,last_orange] / nmax[i,k]) *
+              (1 - vloss * (1 - npumps[i,last_orange] / nmax[i,k]));
+          } else {
+            omega_orange[i,k] = nmax[i,k] *
+              (omega_orange[i,last_orange] / nmax[i,k]) *
+              (1 + vwin  * (     npumps[i,last_orange] / nmax[i,k]));
+          }
+        }
+        last_orange = k;
+      } else {
+        if (k == 1)
+          omega_orange[i,k] = nmax[i,k] * o_omegaone[i];
+        else
+          omega_orange[i,k] = omega_orange[i,k-1];
       }
 
-      // yellow
-      if (k == 1) {
-        omega_yellow[i][k] = nmax[i,k] * y_omegaone[i];
-      } else if (balloon_color[i,k-1] != 3) { // if previous balloon wasn't yellow
-        omega_yellow[i][k] = omega_yellow[i][k-1];
-      } else if (outcome[i,k-1] == 1) {          // popped
-        omega_yellow[i][k] = nmax[i,k] *
-            ( omega_yellow[i][k-1] / nmax[i,k] ) *
-            ( 1 - y_vloss[i] * (1 - (npumps[i,k-1] / nmax[i,k])) );
-      } else {                                   // collected
-        omega_yellow[i][k] = nmax[i,k] *
-            ( omega_yellow[i][k-1] / nmax[i,k] ) *
-            ( 1 + y_vwin[i]  * (npumps[i,k-1] / nmax[i,k]) );
+      // --- YELLOW ---
+      if (balloon_color[i,k] == 3) {
+        if (last_yellow == 0) {
+          omega_yellow[i,k] = nmax[i,k] * y_omegaone[i];
+        } else {
+          real vloss = y_vloss[i];
+          real vwin  = y_vwin[i];
+          if (outcome[i, last_yellow] == 1) {
+            omega_yellow[i,k] = nmax[i,k] *
+              (omega_yellow[i,last_yellow] / nmax[i,k]) *
+              (1 - vloss * (1 - npumps[i,last_yellow] / nmax[i,k]));
+          } else {
+            omega_yellow[i,k] = nmax[i,k] *
+              (omega_yellow[i,last_yellow] / nmax[i,k]) *
+              (1 + vwin  * (     npumps[i,last_yellow] / nmax[i,k]));
+          }
+        }
+        last_yellow = k;
+      } else {
+        if (k == 1)
+          omega_yellow[i,k] = nmax[i,k] * y_omegaone[i];
+        else
+          omega_yellow[i,k] = omega_yellow[i,k-1];
       }
-    } // end trial loop
-  }   // end subject loop
+    }
+  }
 }
+
 
 
 
