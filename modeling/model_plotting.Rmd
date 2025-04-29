@@ -427,7 +427,23 @@ plot_group_trace_all <- function(fit_obj,
 ```
 
 
+```{r}
+#little checker for omega for a specific participant
+plot(mean[1, ], type = "l")
+abline(v = 91, lty = 2, col = "grey")
 
+#or everyone's
+## oo:  draws × subjects × trials  (from rstan::extract)
+post_mean <- apply(oo, c(2, 3), mean)   # subjects × trials
+
+matplot( t(post_mean),                   # transpose → trials on x-axis
+         type = "l", lty = 1, lwd = .8,
+         col = adjustcolor("black", .25),
+         xlab = "Trial",
+         ylab = "Optimal pumps (ω)")
+
+abline(v = 91, lty = 2, col = "grey40")  # reversal point
+```
 
 
 
