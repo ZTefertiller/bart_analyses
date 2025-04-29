@@ -94,121 +94,6 @@ sub_ids <- unique(df$participant_id)
 
 ```
 
-
-```{r different datasets per balloon color}
-# separate data for when blue and orange are the high value balloon. yellow is constant
-df_blue <- df %>% 
-  filter(balloon_color == "b", color_max != 8) %>%
-  arrange(participant_id, trial_number)
-
-df_orange <- df %>% 
-  filter(balloon_color == "o", color_max != 8) %>%
-  arrange(participant_id, trial_number)
-
-df_yellow <- df %>%
-  filter(balloon_color == "y") %>%
-  arrange(participant_id,trial_number)
-```
-
-```{SPQ Groups}
-
-# quantiles <- quantile(df_blue$spq_total_score, probs = c(0.1, 0.9), na.rm = TRUE)
-
-# bottom_cutoff <- quantiles[1]
-# top_cutoff <- quantiles[2]
-
-mean_spq <- mean(df_blue$spq_total_score, na.rm = TRUE)
-sd_spq   <- sd(df_blue$spq_total_score, na.rm = TRUE)
-
-bottom_cutoff <- mean_spq - .80 * sd_spq
-top_cutoff    <- mean_spq + .80 * sd_spq
-
-
-df_blue_high_spq <- df_blue %>%
- # filter(spq_total_score >= 10)
-  filter(spq_total_score >= top_cutoff)
-
-df_blue_low_spq <- df_blue %>%
- # filter(spq_total_score <= 10)
-  filter(spq_total_score <= bottom_cutoff)
-
-df_orange_high_spq <- df_orange %>%
- # filter(spq_total_score >= 10)
-  filter(spq_total_score >= top_cutoff)
-
-df_orange_low_spq <- df_orange %>%
- # filter(spq_total_score <= 10)
-  filter(spq_total_score <= bottom_cutoff)
-
-df_yellow_high_spq <- df_yellow %>%
- # filter(spq_total_score <= 10)
-  filter(spq_total_score >= top_cutoff)
-
-df_yellow_low_spq <- df_yellow %>%
- # filter(spq_total_score <= 10)
-  filter(spq_total_score <= bottom_cutoff)
-
-
-  
-print(cat("high spq scorers:", length(unique(df_blue_high_spq$participant_id)), "\n"))
-print(cat("sanity check # of trials per person: ",
-((nrow(df_blue_high_spq))/(length(unique(df_blue_high_spq$participant_id))))))
-
-print(cat("low spq scorers:", length(unique(df_blue_low_spq$participant_id)), "\n"))
-print(cat("sanity check # of trials per person: ", ((nrow(df_blue_low_spq))/(length(unique(df_blue_low_spq$participant_id))))))
-
-```
-
-```{CAPS Groups}
-
-quantiles <- quantile(df_blue$caps_total, probs = c(0.1, 0.9), na.rm = TRUE)
-
-bottom_cutoff <- quantiles[1]
-top_cutoff <- quantiles[2]
-
-mean_caps <- mean(df_blue$caps_total, na.rm = TRUE)
-sd_spq   <- sd(df_blue$caps_total, na.rm = TRUE)
-
-# bottom_cutoff <- mean_caps - 1 * sd_caps
-# top_cutoff    <- mean_caps + 1 * sd_caps
-
-
-df_blue_high_caps <- df_blue %>%
- # filter(caps_total_score >= 10)
-  filter(caps_total_score >= top_cutoff)
-
-df_blue_low_caps <- df_blue %>%
- # filter(caps_total_score <= 10)
-  filter(caps_total_score <= bottom_cutoff)
-
-df_orange_high_caps <- df_orange %>%
- # filter(caps_total_score >= 10)
-  filter(caps_total_score >= top_cutoff)
-
-df_orange_low_caps <- df_orange %>%
- # filter(caps_total_score <= 10)
-  filter(caps_total_score <= bottom_cutoff)
-
-df_yellow_high_caps <- df_yellow %>%
- # filter(caps_total_score <= 10)
-  filter(caps_total_score >= top_cutoff)
-
-df_yellow_low_caps <- df_yellow %>%
- # filter(caps_total_score <= 10)
-  filter(caps_total_score <= bottom_cutoff)
-
-
-  
-print(cat("high caps scorers:", length(unique(df_blue_high_caps$participant_id)), "\n"))
-print(cat("sanity check # of trials per person: ",
-((nrow(df_blue_high_caps))/(length(unique(df_blue_high_caps$participant_id))))))
-
-print(cat("low caps scorers:", length(unique(df_blue_low_caps$participant_id)), "\n"))
-print(cat("sanity check # of trials per person: ", ((nrow(df_blue_low_caps))/(length(unique(df_blue_low_caps$participant_id))))))
-
-```
-
-
 ```{r load function: stan input data}
 # function for assembling the data for STAN model
 # questionnaires excluded as model params by default
@@ -301,7 +186,9 @@ run_stan_fit <- function(data, fit_name = "default") {
       chains = 4,           # number of chains
       seed = 10191998,      # (it is my birthday in MM-DD-YYYY btw)
       # sample_file = sample_file,  # uncomment for csv file saving
-      cores = 6             # parallel chains (overloads system memory if too many)
+      cores = 6,             # parallel chains (overloads system memory if too many)
+      pars    = c("omega_blue", "omega_orange", "omega_yellow"),
+      include = FALSE 
     )
   })
   print(memory_used)
@@ -386,14 +273,18 @@ param_extract <- function(fit, sub_ids,
 ```
 
 ```{r get omega}
-omega_out_samples <- rstan::extract(fit, pars = "omega_out")$omega_out
-# posterior mean predicted inflations per subject and trial
-omega_out_mean <- apply(omega_out_samples, c(2, 3), mean)
-# Example: omega values for participant 1
-omega_out_mean[1, ]
+omega_out <- rstan::extract(test, pars = "omega_out",
+                            permuted = TRUE)$omega_out   # draws × subj × trial
+
+# draws collapsed → posterior mean per subj & trial
+omega_out_mean <- apply(omega_out, c(2, 3), mean)
+
+# check
+dim(omega_out_mean)            # should be  #subj × #trial
+omega_out_mean[1, ]            # now sensible values
 ```
 
-```{r}
+```{r old}
 blue_sum <- summarize_stanfit(blue_stl_all)
 blue_params <- param_extract(blue_stl_all, stan_data_blue$sub_ids)
 blue_merge <- left_join(df_blue, blue_params, by = "participant_id")
