@@ -26,42 +26,106 @@ transformed data {
 
 parameters {
   // Group-level parameters
-  vector[5] mu_pr;
-  vector<lower=0>[5] sigma;
+  vector[5] b_mu_pr;
+  vector[5] o_mu_pr;
+  vector[5] y_mu_pr;
+  vector<lower=0>[15] sigma;
+  // 5 sigma per color
 
   // Normally distributed error for Matt trick
-  vector[nsub] phi_pr;
-  vector[nsub] eta_pr;
-  vector[nsub] rho_pr;
-  vector[nsub] tau_pr;
-  vector[nsub] lambda_pr;
+  // blue
+  vector[nsub] b_phi_pr;
+  vector[nsub] b_beta_pr;
+  vector[nsub] b_rho_pr;
+  vector[nsub] b_tau_pr;
+  vector[nsub] b_lambda_pr;
+  // orange
+  vector[nsub] o_phi_pr;
+  vector[nsub] o_beta_pr;
+  vector[nsub] o_rho_pr;
+  vector[nsub] o_tau_pr;
+  vector[nsub] o_lambda_pr;
+  // yellow
+  vector[nsub] y_phi_pr;
+  vector[nsub] y_beta_pr;
+  vector[nsub] y_rho_pr;
+  vector[nsub] y_tau_pr;
+  vector[nsub] y_lambda_pr;
+  
 }
 
 transformed parameters {
   // Subject-level parameters with Matt trick
-  vector<lower=0,upper=1>[nsub] phi;
+  
+  //blue
+  vector<lower=0,upper=1>[nsub] b_phi;
   vector<lower=0>[nsub] eta;
-  vector<lower=-0.5,upper=0.5>[nsub] rho;
-  vector<lower=0>[nsub] tau;
-  vector<lower=0>[nsub] lambda;
+  vector<lower=-0.5,upper=0.5>[nsub] b_rho;
+  vector<lower=0>[nsub] b_tau;
+  vector<lower=0>[nsub] b_lambda;
 
-  phi = Phi_approx(mu_pr[1] + sigma[1] * phi_pr);
-  eta = Phi_approx(mu_pr[2] + sigma[2] * eta_pr);
-  rho = 0.5 - Phi_approx(mu_pr[3] + sigma[3] * rho_pr);
-  tau = exp(mu_pr[4] + sigma[4] * tau_pr);
-  lambda = exp(mu_pr[5] + sigma[5] * lambda_pr);
+  b_phi = Phi_approx(b_mu_pr[1] + sigma[1] * b_phi_pr);
+  b_eta = Phi_approx(b_mu_pr[2] + sigma[2] * b_eta_pr);
+  b_rho = 0.5 - Phi_approx(b_mu_pr[3] + sigma[3] * b_rho_pr);
+  b_tau = exp(b_mu_pr[4] + sigma[4] * b_tau_pr);
+  b_lambda = exp(b_mu_pr[5] + sigma[5] * b_lambda_pr);
+  
+  //orange
+  vector<lower=0,upper=1>[nsub] o_phi;
+  vector<lower=0>[nsub] eta;
+  vector<lower=-0.5,upper=0.5>[nsub] o_rho;
+  vector<lower=0>[nsub] o_tau;
+  vector<lower=0>[nsub] o_lambda;
+
+  o_phi = Phi_approx(o_mu_pr[1] + sigma[6] * o_phi_pr);
+  o_eta = Phi_approx(o_mu_pr[2] + sigma[7] * o_eta_pr);
+  o_rho = 0.5 - Phi_approx(o_mu_pr[3] + sigma[8] * o_rho_pr);
+  o_tau = exp(o_mu_pr[4] + sigma[9] * o_tau_pr);
+  o_lambda = exp(o_mu_pr[5] + sigma[10] * o_lambda_pr);
+  
+  //yellow
+  vector<lower=0,upper=1>[nsub] y_phi;
+  vector<lower=0>[nsub] eta;
+  vector<lower=-0.5,upper=0.5>[nsub] y_rho;
+  vector<lower=0>[nsub] y_tau;
+  vector<lower=0>[nsub] y_lambda;
+
+  y_phi = Phi_approx(y_mu_pr[1] + sigma[11] * y_phi_pr);
+  y_eta = Phi_approx(y_mu_pr[2] + sigma[12] * y_eta_pr);
+  y_rho = 0.5 - Phi_approx(y_mu_pr[3] + sigma[13] * y_rho_pr);
+  y_tau = exp(y_mu_pr[4] + sigma[14] * y_tau_pr);
+  y_lambda = exp(y_mu_pr[5] + sigma[15] * y_lambda_pr);
+  
 }
 
 model {
   // Prior
-  mu_pr  ~ normal(0, 1);
+  //blue
+  b_mu_pr  ~ normal(0, 1);
   sigma ~ normal(0, 0.2); // cauchy(0, 5);
-
-  phi_pr ~ normal(0, 1);
-  eta_pr ~ normal(0, 1);
-  rho_pr ~ normal(0, 1);
-  tau_pr ~ normal(0, 1);
-  lambda_pr ~ normal(0, 1);
+  b_phi_pr ~ normal(0, 1);
+  b_eta_pr ~ normal(0, 1);
+  b_rho_pr ~ normal(0, 1);
+  b_tau_pr ~ normal(0, 1);
+  b_lambda_pr ~ normal(0, 1);
+  
+  //orange
+  o_mu_pr  ~ normal(0, 1);
+  sigma ~ normal(0, 0.2); // cauchy(0, 5);
+  o_phi_pr ~ normal(0, 1);
+  o_eta_pr ~ normal(0, 1);
+  o_rho_pr ~ normal(0, 1);
+  o_tau_pr ~ normal(0, 1);
+  o_lambda_pr ~ normal(0, 1);
+  
+  //yellow
+  y_mu_pr  ~ normal(0, 1);
+  sigma ~ normal(0, 0.2); // cauchy(0, 5);
+  y_phi_pr ~ normal(0, 1);
+  y_eta_pr ~ normal(0, 1);
+  y_rho_pr ~ normal(0, 1);
+  y_tau_pr ~ normal(0, 1);
+  y_lambda_pr ~ normal(0, 1);
 
   // Likelihood
   for (j in 1:nsub) {
