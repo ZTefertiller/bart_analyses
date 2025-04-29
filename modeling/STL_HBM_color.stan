@@ -93,7 +93,7 @@ transformed parameters {
           // first-ever blue
           omega_blue[i,k] = nmax[i,k] * b_omegaone[i];
         } else {
-          // update from the last blue trial, but outcome from k-1
+          // update outcome and therefore learning rate/omega update from the last blue trial
           real vloss = (k < 91 ? b_vloss_pre[i]  : b_vloss_post[i]);
           real vwin  = (k < 91 ? b_vwin_pre[i]   : b_vwin_post[i]);
           if (outcome[i, last_blue] == 1) {
