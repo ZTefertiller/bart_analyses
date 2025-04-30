@@ -1,63 +1,53 @@
 per_participant <- function(number) {
-  
-  # Select the participant index
   sub_index <- number
   
-  # Number of trials for that participant
-  n_trials <- sum(df$participant_id == unique(df$participant_id)[sub_index])
+  # Get participant ID and their data
+  pid <- unique(df$participant_id)[sub_index]
+  sub_data <- df[df$participant_id == pid, ]
+  n_trials <- nrow(sub_data)
   
-  # Get that participant's data
-  sub_data <- df[df$participant_id == unique(df$participant_id)[sub_index], ]
+  # Get omega posterior mean
+  omega_mean <- colMeans(post$omega_out[, sub_index, 1:n_trials])
   
-  # Get omega_out posterior mean for that participant
-  omega_mean <- colMeans(post$omega_out[, sub_index, ])
+  # Map balloon_color codes to actual color names
+  color_map <- c("b" = "blue", "o" = "orange", "y" = "gold")
+  sub_data$balloon_color_code <- color_map[sub_data$balloon_color]
   
-  # Set up balloon color coding
-  colors <- c("blue", "orange", "yellow")
-  balloon_colors <- factor(sub_data$balloon_color, levels = 1:3, labels = colors)
+  # Dataframe for plotting
+  plot_df <- data.frame(
+    trial = 1:n_trials,
+    omega = omega_mean,
+    inflations = sub_data$inflations,
+    color = sub_data$balloon_color_code,
+    popped = sub_data$popped
+  )
   
-  # Start plotting
-  plot(omega_mean, type = "l", col = "black", lwd = 2,
-       ylab = "Omega", xlab = "Trial",
-       ylim = range(c(omega_mean, sub_data$inflations)),
-       main = paste("Participant", unique(sub_data$participant_id)))
-  
-  # Shade background by balloon color
-  rects <- rle(as.character(balloon_colors))
-  
-  start <- 1
-  for (i in seq_along(rects$lengths)) {
-    end <- start + rects$lengths[i] - 1
-    col_shade <- ifelse(rects$values[i] == "blue", rgb(0,0,1,0.1),
-                        ifelse(rects$values[i] == "orange", rgb(1,0.5,0,0.1),
-                               rgb(1,1,0,0.1)))
-    rect(xleft = start, xright = end, ybottom = -Inf, ytop = Inf,
-         col = col_shade, border = NA)
-    start <- end + 1
-  }
-  
-  # Redraw omega and actual inflations on top
-  lines(omega_mean, col = "black", lwd = 2)
-  lines(sub_data$inflations, col = "red", lwd = 2, lty = 2)
-  
-  # Mark reversal (trial 91)
-  abline(v = 91, col = "darkred", lty = 3)
-  
-  # Add a legend (without the reversal line)
-  legend("topright", legend = c("Omega", "Inflations"),
-         col = c("black", "red"), lty = c(1, 2), bty = "n")
-  
-  pop_trials <- which(sub_data$popped == 1)  # trials where balloon popped
-  points(x = pop_trials,
-         y = sub_data$inflations[pop_trials],  # number of pumps when it popped
-         pch = 4,  # x-mark symbol
-         col = "darkred",
-         cex = 0.7,  # size of the x-mark
-         lwd = 1.2)  # thickness of the lines in the x
+  # Plot
+  ggplot(plot_df, aes(x = trial)) +
+    # Lines connecting omega to inflations
+    geom_segment(aes(y = omega, yend = inflations, xend = trial, color = color), alpha = 0.7) +
+    
+    # Omega points
+    geom_line(aes(y = omega), color = "black", size = 1.2) +
+    
+    # Inflation points
+    geom_point(aes(y = inflations, fill = color), shape = 21, size = 1, stroke = 0.3, color = "black")+
+    # Vertical line at trial 91
+    #geom_vline(xintercept = 91, linetype = "dashed", color = "darkred") +
+    
+    # Popped balloon markers
+    geom_point(data = subset(plot_df, popped == 1),
+               aes(x = trial, y = inflations),
+               shape = 4, size = .5, stroke = 1, color = "darkred") +
+    
+    scale_fill_identity() +
+    scale_color_identity() +
+    
+    labs(title = paste("Participant", pid),
+         x = "Trial", y = "Value") +
+    coord_cartesian(ylim = c(0, 100)) +         # <--- add this line
+    theme_minimal()
 }
-
-
-
 
 
 
@@ -198,4 +188,62 @@ run_ppc_all_participants(
   output_folder = "~/Desktop/participant_checks_ppc",
   n_draws = 200  # or however many you want
 )
+
+
+
+
+
+
+
+
+
+
+## correlation
+
+correlation <- function(df, post) {
+  participant_ids <- unique(df$participant_id)
+  cor_df <- data.frame(participant_id = character(),
+                       correlation = numeric(),
+                       stringsAsFactors = FALSE)
+  
+  for (i in seq_along(participant_ids)) {
+    pid <- participant_ids[i]
+    
+    sub_data <- df %>% filter(participant_id == pid)
+    omega_mean <- colMeans(post$omega_out[, i, ])  # i assumes post is ordered same as df
+    
+    # If the omega vector length doesn't match trial count, warn
+    if (length(omega_mean) != nrow(sub_data)) {
+      warning(paste("Length mismatch for participant", pid))
+      next
+    }
+    
+    # Correlation between model-predicted omega and actual inflations
+    r <- cor(omega_mean, sub_data$inflations, method = "pearson", use = "complete.obs")
+    
+    cor_df <- rbind(cor_df, data.frame(participant_id = pid, correlation = r))
+  }
+  
+  cor_df <- cor_df %>% mutate(z = atanh(correlation))
+  
+  # One-sample t-test
+  t_test_result <- t.test(cor_df$z, mu = 0)
+  
+  print(t_test_result)
+  
+  hist(cor_df$correlation,
+       breaks = 15,
+       main = "Per-Participant Correlations (Predicted Omega vs Inflations)",
+       xlab = "Pearson Correlation Coefficient")
+  
+}
+library(ggplot2)
+
+
+
+
+
+
+
+
 
