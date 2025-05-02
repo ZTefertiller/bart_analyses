@@ -290,5 +290,31 @@ omega_out_mean[1, ]            # now sensible values
 
 ```{r load fit}
 fit <- readRDS("/Users/zachtefertiller/Desktop/beta_split.rds")
-post <- rstan::extract(fit)
+```
+
+
+```{r looic}
+post <- rstan::extract(beta_test_2)
+
+log_lik_array <- extract(beta_test_2, pars = "log_lik")$log_lik  # now dim = (iterations, nsub, ntrial)
+
+dim(log_lik_array) <- c(dim(log_lik_array)[1], dim(log_lik_array)[2] * dim(log_lik_array)[3])
+
+loo_result <- loo(log_lik_array)
+print(loo_result)
+
+k_vals <- pareto_k_values(loo_result)
+
+library(ggplot2)
+
+ggplot(data.frame(k = k_vals), aes(x = k)) +
+  geom_histogram(bins = 50, fill = "skyblue", color = "black") +
+  geom_vline(xintercept = 0.7, color = "red", linetype = "dashed") +
+  labs(
+    title = "Distribution of Pareto k Values",
+    x = "Pareto k",
+    y = "Count"
+  ) +
+  theme_minimal()
+
 ```
