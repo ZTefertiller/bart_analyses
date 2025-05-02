@@ -165,7 +165,7 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
 
 
 ```{r loading stan parameters}
-stl_stan_data <- create_stl_stan_params(df)
+stan_data <- create_stl_stan_params(df)
 ```
 
 
@@ -176,7 +176,7 @@ run_stan_fit <- function(data, fit_name = "default") {
   #sample_file <- paste0("/Users/zachtefertiller/Desktop/", "mcmc", fit_name)
   memory_used <- mem_change({
     mod <- stan_model(file
-        ="/Users/zachtefertiller/Desktop/bart_analyses/modeling/STL_HBM_color.stan")
+        ="/Users/zachtefertiller/Desktop/bart_analyses/modeling/emwv_test.stan")
     fit <- sampling(
       mod,
       data = data,          # stan data
@@ -187,7 +187,7 @@ run_stan_fit <- function(data, fit_name = "default") {
       seed = 10191998,      # (it is my birthday in MM-DD-YYYY btw)
       # sample_file = sample_file,  # uncomment for csv file saving
       cores = 6,             # parallel chains (overloads system memory if too many)
-      pars    = c("omega_blue", "omega_orange", "omega_yellow"),
+     # pars    = c("omega_blue", "omega_orange", "omega_yellow"),
       include = FALSE 
     )
   })
@@ -226,7 +226,7 @@ get_draws <- function(fit, include_questionnaires = FALSE, extra_parameters = NU
 ```
 
 ```{r}
-npump_test <- run_stan_fit(stl_stan_data)
+test <- run_stan_fit(stan_data)
 ```
 
 # summarize_stanfit()
@@ -289,5 +289,6 @@ omega_out_mean[1, ]            # now sensible values
 
 
 ```{r load fit}
-fit <- readRDS("/Users/zachtefertiller/Desktop/vec_test_three.rds")
+fit <- readRDS("/Users/zachtefertiller/Desktop/beta_split.rds")
+post <- rstan::extract(fit)
 ```
