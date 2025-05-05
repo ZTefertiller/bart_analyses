@@ -22,7 +22,7 @@ library(reshape2)
 
 ```{r trace plot}
 # function for trace plot of main group parameters
-plot_group_trace <- function(fit, regex = "^(b_mu_|o_mu_|y_mu_)", per_page = 6, warmup = NULL, iter = NULL) {
+plot_group_trace <- function(fit, regex = "^(b_mu_|o_mu_|y_mu_|mu)", per_page = 6, warmup = NULL, iter = NULL) {
   library(bayesplot)
   library(posterior)
   library(ggplot2)
