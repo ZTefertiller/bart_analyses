@@ -98,9 +98,10 @@ sub_ids <- unique(df$participant_id)
 # function for assembling the data for STAN model
 # questionnaires excluded as model params by default
 
-create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
+create_stan_params <- function(df, include_questionnaires = FALSE) {
   nsub <- length(unique(df$participant_id))
   ntrial <- nrow(df) / nsub
+  Tsubj <- rep(ntrial, nsub)
   outcome   <- matrix(df$popped, nrow = nsub, ncol = ntrial, byrow = TRUE)
   npumps    <- matrix(df$inflations, nrow = nsub, ncol = ntrial, byrow = TRUE)
   nmax <- matrix(df$color_max, nrow = nsub, ncol = ntrial, byrow = TRUE)
@@ -131,12 +132,15 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
     }
   }
   
+  participant_ids <- df$participant_id[!duplicated(df$participant_id)]
+  
   #going back over NA values with 75 as placeholder because stan doesnt like NA
   d[is.na(d)] <- 75
   
   stan_data <- list(
     nsub = nsub,
     ntrial = ntrial,
+    Tsubj = Tsubj,
     outcome = outcome,
     npumps = npumps,
     nmax = nmax,
@@ -146,6 +150,8 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
     balloon_color = balloon_color,
     sub_ids = sub_ids  # including participant ids for tracking in stan summary
   )
+    stan_data$sub_ids <- as.integer(factor(df$participant_id[!duplicated(df$participant_id)], 
+                                       levels = participant_ids))
 
   if (include_questionnaires) {
       questionnaires <- data.frame(
@@ -165,7 +171,7 @@ create_stl_stan_params <- function(df, include_questionnaires = FALSE) {
 
 
 ```{r loading stan parameters}
-stan_data <- create_stl_stan_params(df)
+stan_data <- create_stan_params(df)
 ```
 
 
@@ -187,7 +193,6 @@ run_stan_fit <- function(data, fit_name = "default") {
       seed = 10191998,      # (it is my birthday in MM-DD-YYYY btw)
       # sample_file = sample_file,  # uncomment for csv file saving
       cores = 6,             # parallel chains (overloads system memory if too many)
-     # pars    = c("omega_blue", "omega_orange", "omega_yellow"),
       include = FALSE 
     )
   })
@@ -196,6 +201,44 @@ run_stan_fit <- function(data, fit_name = "default") {
   saveRDS(fit, file = paste0("/Users/zachtefertiller/Desktop/", fit_name, ".rds"))
   return(fit)
 }
+```
+
+
+```{r cmdstan equivalent because of compiler issue or ARM}
+library(cmdstanr)
+library(pryr)  # for mem_change
+
+cmd_stan_fit <- function(data, fit_name = "default") {
+  model_path <- "/Users/zachtefertiller/Desktop/bart_analyses/modeling/emwv_test.stan"
+  output_path <- paste0("/Users/zachtefertiller/Desktop/", fit_name, ".rds")
+  
+  memory_used <- mem_change({
+    mod <- cmdstan_model(model_path)
+    
+    fit <- mod$sample(
+      data = data,
+      iter_warmup = 1000,
+      iter_sampling = 1000,
+      chains = 4,
+      parallel_chains = 4,
+      seed = 10191998,
+      refresh = 500  # adjusts console output
+    )
+  })
+
+  print(memory_used)
+  
+  assign(fit_name, fit, envir = .GlobalEnv)
+  saveRDS(fit, file = output_path)
+  return(fit)
+}
+
+```
+
+
+
+```{r}
+emwv_test <- cmd_stan_fit(stan_data, "emwv_test")
 ```
 
 
@@ -225,9 +268,12 @@ get_draws <- function(fit, include_questionnaires = FALSE, extra_parameters = NU
 }
 ```
 
-```{r}
-test <- run_stan_fit(stan_data)
-```
+
+
+
+
+
+
 
 # summarize_stanfit()
 ```{r load function: get stanfit summary}
@@ -294,9 +340,9 @@ fit <- readRDS("/Users/zachtefertiller/Desktop/beta_split.rds")
 
 
 ```{r looic}
-post <- rstan::extract(beta_test_2)
+post <- rstan::extract(fit)
 
-log_lik_array <- extract(beta_test_2, pars = "log_lik")$log_lik  # now dim = (iterations, nsub, ntrial)
+log_lik_array <- extract(fit, pars = "log_lik")$log_lik  # now dim = (iterations, nsub, ntrial)
 
 dim(log_lik_array) <- c(dim(log_lik_array)[1], dim(log_lik_array)[2] * dim(log_lik_array)[3])
 
