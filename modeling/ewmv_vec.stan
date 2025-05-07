@@ -43,7 +43,7 @@ functions {
         n_pump += npumps[j, k];
 
         if (n_pump > 0) {
-          p_burst = phi[j] + (1 - exp(-n_pump * eta[j])) * ((n_pump - n_succ) / n_pump - phi[j]);
+          p_burst = phi[j] + (1 - exp(-n_pump * eta[j])) * ((n_pump - n_succ) * 1.0 / n_pump - phi[j]);
         }
       }
     }
@@ -148,7 +148,7 @@ generated quantities {
       n_pump += npumps[j, k];
 
       if (n_pump > 0) {
-        p_burst = phi[j] + (1 - exp(-n_pump * eta[j])) * ((n_pump - n_succ) / n_pump - phi[j]);
+        p_burst = phi[j] + (1 - exp(-n_pump * eta[j])) * ((n_pump - n_succ) * 1.0 / n_pump - phi[j]);
       }
     }
   }
