@@ -56,10 +56,13 @@ data {
   int<lower=1> nsub;
   int<lower=1> ntrial;
   int<lower=1> maxpump;
-  array[nsub] int subj_idx;
   array[nsub, ntrial] int<lower=0> npumps;
   array[nsub, ntrial] int<lower=0, upper=1> outcome;
   array[nsub, ntrial, maxpump] int<lower=-1> d;
+}
+
+transformed data {
+  array[nsub] int subj_idx = linspaced_int_array(nsub, 1, nsub);
 }
 
 parameters {
