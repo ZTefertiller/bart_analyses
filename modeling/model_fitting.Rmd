@@ -152,6 +152,7 @@ create_stan_params <- function(df, include_questionnaires = FALSE) {
   )
     stan_data$sub_ids <- as.integer(factor(df$participant_id[!duplicated(df$participant_id)], 
                                        levels = participant_ids))
+    stan_data$subj_idx <- 1:stan_data$nsub
 
   if (include_questionnaires) {
       questionnaires <- data.frame(
@@ -209,11 +210,11 @@ library(cmdstanr)
 library(pryr)  # for mem_change
 
 cmd_stan_fit <- function(data, fit_name = "default") {
-  model_path <- "/Users/zachtefertiller/Desktop/bart_analyses/modeling/4par.stan"
+  model_path <- "/Users/zachtefertiller/Desktop/bart_analyses/modeling/ewmv_vec.stan"
   output_path <- paste0("/Users/zachtefertiller/Desktop/", fit_name, ".rds")
   
   memory_used <- mem_change({
-    mod <- cmdstan_model(model_path)
+    mod <- cmdstan_model(model_path,  cpp_options = list(stan_threads = TRUE))
     
     fit <- mod$sample(
       data = data,
@@ -237,11 +238,11 @@ cmd_stan_fit <- function(data, fit_name = "default") {
 ```
 
 ```{r}
-cmd_stan_fit(stan_data, "4par")
+cmd_stan_fit(stan_data, "ewmv")
 ```
 
 ```{r}
-emwv_test <- cmd_stan_fit(stan_data, "emwv_test")
+ewmv_test <- cmd_stan_fit(stan_data, "ewmv_test")
 ```
 
 
