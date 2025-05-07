@@ -111,8 +111,8 @@ generated quantities {
   vector<lower=0>[nsub] tau;
   vector<lower=0>[nsub] lambda;
 
-  real log_lik[nsub];
-
+  array[nsub] real log_lik;
+  
   for (j in 1:nsub) {
     phi[j] = Phi_approx(mu_pr[1] + sigma[1] * phi_pr[j]);
     eta[j] = Phi_approx(mu_pr[2] + sigma[2] * eta_pr[j]);
