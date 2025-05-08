@@ -1,7 +1,8 @@
 functions {
-  real partial_log_lik(array[] int subj_idx,
+  real partial_log_lik(array[] int slice_subj_idx,
                        int start,
                        int end,
+                       // Other data and parameters
                        int ntrial,
                        int maxpump,
                        array[,] int npumps,
@@ -14,8 +15,8 @@ functions {
                        vector lambda) {
     real ll = 0;
 
-    for (s in start:end) {
-      int j = subj_idx[s];
+    for (i in 1:size(slice_subj_idx)) {
+      int j = slice_subj_idx[i];  // Use the index from the slice
       int n_succ = 0;
       int n_pump = 0;
       real p_burst = phi[j];
@@ -54,7 +55,7 @@ functions {
 
 data {
   int<lower=1> nsub;
-  array[nsub] int subj_idx;
+  array[nsub] int<lower=1, upper=nsub> subj_idx;  // Make sure indexes are valid
   int<lower=1> ntrial;
   int<lower=1> maxpump;
   array[nsub, ntrial] int<lower=0> npumps;
@@ -89,8 +90,15 @@ model {
     vector[nsub] rho = 0.5 - Phi_approx(mu_pr[3] + sigma[3] .* rho_pr);
     vector[nsub] tau = exp(mu_pr[4] + sigma[4] .* tau_pr);
     vector[nsub] lambda = exp(mu_pr[5] + sigma[5] .* lambda_pr);
-
-    target += reduce_sum(partial_log_lik, subj_idx, 1, ntrial, maxpump, npumps, outcome, d,
+    
+    // Create array of indices 1:nsub for reduce_sum
+    array[nsub] int indices;
+    for (i in 1:nsub) {
+      indices[i] = i;
+    }
+    
+    target += reduce_sum(partial_log_lik, indices, 1, 
+                         ntrial, maxpump, npumps, outcome, d,
                          phi, eta, rho, tau, lambda);
   }
 }
@@ -134,7 +142,7 @@ generated quantities {
           u_loss = l - 1;
           u_pump = (1 - p_burst) * u_gain
                    - lambda[j] * p_burst * u_loss
-                   + rho[j] * p_burst * (1 - p_burst) * pow(u_gain + lambda[j] * u_loss, 2);
+                   + rho[j] * p_burst * (1 - p_burst) * square(u_gain + lambda[j] * u_loss);
           delta_u = u_pump - u_stop;
 
           log_lik[j] += bernoulli_logit_lpmf(d[j, k, l] | tau[j] * delta_u);
@@ -150,4 +158,3 @@ generated quantities {
     }
   }
 }
-
