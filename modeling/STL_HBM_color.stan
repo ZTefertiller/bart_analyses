@@ -271,36 +271,38 @@ model {
 // saving omega_out for model output inflations per participant
 
 generated quantities {
-  
   array[nsub, ntrial] real omega_out;
-  array[nsub] real log_lik;
+  array[nsub, ntrial] real log_lik;
 
-  // same exact logic as in model
   for (i in 1:nsub) {
-    
-    log_lik[i] = 0; // except initializing log likelihood 
-    
-      for (k in 1:ntrial) {
-        real beta_i  = (k > 90) ? (
-            (balloon_color[i, k] == 1) ? b_beta_post[i] :
-            (balloon_color[i, k] == 2) ? o_beta_post[i] :
-                                         y_beta[i]
-             ) : (
-                (balloon_color[i, k] == 1) ? b_beta_pre[i] :
-                (balloon_color[i, k] == 2) ? o_beta_pre[i] :
-                                             y_beta[i]
-             );
-  
-        real omega_k = (balloon_color[i,k]==1) ? omega_blue[i][k] :
-                        (balloon_color[i,k]==2) ? omega_orange[i][k] :                                                omega_yellow[i][k];
-  
-        omega_out[i,k] = omega_k;         // save omega
-        int opp = opportunity[i,k];
-        row_vector[opp] n_idx = linspaced_row_vector(opp, 1, opp);
-  
-        log_lik[i] += bernoulli_logit_lpmf(
-                        d[i,k,1:opp] |
-                        -beta_i * ( n_idx - omega_k ) );
+    for (k in 1:ntrial) {
+      real beta_i;
+      real omega_k;
+
+      beta_i = (k > 90) ? (
+        (balloon_color[i, k] == 1) ? b_beta_post[i] :
+        (balloon_color[i, k] == 2) ? o_beta_post[i] :
+                                     y_beta[i]
+      ) : (
+        (balloon_color[i, k] == 1) ? b_beta_pre[i] :
+        (balloon_color[i, k] == 2) ? o_beta_pre[i] :
+                                     y_beta[i]
+      );
+
+      omega_k = (balloon_color[i,k] == 1) ? omega_blue[i][k] :
+                 (balloon_color[i,k] == 2) ? omega_orange[i][k] :
+                                             omega_yellow[i][k];
+
+      omega_out[i,k] = omega_k;
+
+      int opp = opportunity[i,k];
+      row_vector[opp] n_idx = linspaced_row_vector(opp, 1, opp);
+
+      log_lik[i,k] = bernoulli_logit_lpmf(
+        d[i,k,1:opp] |
+        -beta_i * ( n_idx - omega_k )
+      );
     }
   }
 }
+
