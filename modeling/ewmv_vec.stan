@@ -116,7 +116,7 @@ generated quantities {
   vector<lower=0>[nsub] tau;
   vector<lower=0>[nsub] lambda;
 
-  array[nsub] real log_lik;
+  array[nsub, ntrial] real log_lik;
 
   for (j in 1:nsub) {
     phi[j] = Phi_approx(mu_pr[1] + sigma[1] * phi_pr[j]);
@@ -128,7 +128,7 @@ generated quantities {
     int n_succ = 0;
     int n_pump = 0;
     real p_burst = phi[j];
-    log_lik[j] = 0;
+    log_lik[j, k] = 0;
 
     for (k in 1:ntrial) {
       real u_gain = 1;
@@ -145,7 +145,7 @@ generated quantities {
                    + rho[j] * p_burst * (1 - p_burst) * square(u_gain + lambda[j] * u_loss);
           delta_u = u_pump - u_stop;
 
-          log_lik[j] += bernoulli_logit_lpmf(d[j, k, l] | tau[j] * delta_u);
+          log_lik[j,k] += bernoulli_logit_lpmf(d[j, k, l] | tau[j] * delta_u);
         }
       }
 
