@@ -16,13 +16,13 @@ knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(bayesplot)
 library(ggplot2)
-library(rstan)
 library(pryr)
 library(loo)
+library(cmdstanr)
 
 # initial setup for my own task design, adapt balloon_color in the code and dataset as needed.
 
-dataset <- read.csv('/Users/zachtefertiller/Desktop/BART RL 180 Data/balloon_task_clean_data.csv', header=TRUE, sep=",", stringsAsFactors=FALSE)
+dataset <- read.csv('/home/BRAIN/ztefertiller/ztefertiller/balloon_task_clean_data.csv', header=TRUE, sep=",", stringsAsFactors=FALSE)
 
 # setup dataframe for reversal
 df <- dataset %>%
@@ -176,53 +176,21 @@ stan_data <- create_stan_params(df)
 ```
 
 
-```{r load function: fit model}
-# run the model and provide a string for fit_name for the environment and saving to desktop
-run_stan_fit <- function(data, fit_name = "default") {
-  # uncomment line below and sample_file in the sampling function call to save CSV files per chain 
-  #sample_file <- paste0("/Users/zachtefertiller/Desktop/", "mcmc", fit_name)
-  memory_used <- mem_change({
-    mod <- stan_model(file
-        ="/Users/zachtefertiller/Desktop/bart_analyses/modeling/emwv_test.stan")
-    fit <- sampling(
-      mod,
-      data = data,          # stan data
-      iter = 2000,          # iterations total
-      warmup = 1000,        # how many burn in out of total
-      save_warmup = TRUE,
-      chains = 4,           # number of chains
-      seed = 10191998,      # (it is my birthday in MM-DD-YYYY btw)
-      # sample_file = sample_file,  # uncomment for csv file saving
-      cores = 6,             # parallel chains (overloads system memory if too many)
-      include = FALSE 
-    )
-  })
-  print(memory_used)
-  assign(fit_name, fit, envir = .GlobalEnv)
-  saveRDS(fit, file = paste0("/Users/zachtefertiller/Desktop/", fit_name, ".rds"))
-  return(fit)
-}
-```
-
-
 ```{r cmdstan equivalent because of compiler issue or ARM}
-library(cmdstanr)
-library(pryr)  # for mem_change
-
 cmd_stan_fit <- function(data, fit_name = "default") {
-  model_path <- "/Users/zachtefertiller/Desktop/bart_analyses/modeling/ewmv_vec.stan"
-  output_path <- paste0("/Users/zachtefertiller/Desktop/", fit_name, ".rds")
+  model_path <- "/home/BRAIN/ztefertiller/ztefertiller/bart_analyses/modeling/ewmv_vec.stan"
+  output_path <- paste0("/home/BRAIN/ztefertiller/ztefertiller/bart_analyses", fit_name, ".rds")
   
   memory_used <- mem_change({
     mod <- cmdstan_model(model_path,  cpp_options = list(stan_threads = TRUE))
     
     fit <- mod$sample(
       data = data,
-      iter_warmup = 1000,
-      iter_sampling = 1000,
+      iter_warmup = 2000,
+      iter_sampling = 6000,
       chains = 4,
       parallel_chains = 4,
-      threads_per_chain = 1,
+      threads_per_chain = 7,
       seed = 10191998,
       refresh = 500  # adjusts console output
     )
@@ -238,119 +206,35 @@ cmd_stan_fit <- function(data, fit_name = "default") {
 ```
 
 ```{r}
-cmd_stan_fit(stan_data, "ewmv")
+ewmv <- cmd_stan_fit(stan_data, "ewmv")
 ```
 
 ```{r}
-ewmv_test <- cmd_stan_fit(stan_data, "ewmv_test")
-```
+library(posterior)
+variables <- fit$draws() %>% variables()
 
+group_params <- grep("mu", variables, value=TRUE)
 
-```{r load function: extract draws}
-get_draws <- function(fit, include_questionnaires = FALSE, extra_parameters = NULL) {
-  if (include_questionnaires) {
-    group_factors <- c("mu_vwin", "mu_vloss", "mu_omegaone",
-                       "mu_beta", "beta_vwin_spq", "beta_vloss_spq",
-                       "beta_beta_spq", "beta_omegaone_spq", "beta_vwin_caps",
-                       "beta_vloss_caps", "beta_beta_caps", "beta_omegaone_caps",
-                       "beta_vwin_pdi", "beta_vloss_pdi", "beta_omegaone_pdi",
-                       "beta_beta_pdi")
-  } 
-  else {
-    group_factors <- c("mu_vwin", "mu_vloss", "mu_omegaone",
-                       "mu_beta", "vwin", "vloss", "beta", "omegaone")
-  }
-  
-  if (!is.null(extra_parameters)) {
-    group_factors <- c(group_factors, extra_parameters)
-  }
-  
-  #draws_array <- as.array(fit, pars = group_factors, inc_warmup = TRUE)
-  draws_array <- rstan::extract(fit, permuted = FALSE, inc_warmup = TRUE)
-  print(draws_array)
-  return(draws_array)
-}
-```
+group_draws <- fit$draws(variables = group_params)
 
-
-
-
-
-
-
-
-# summarize_stanfit()
-```{r load function: get stanfit summary}
-# function to get summary stats for the model
-summarize_stanfit <- function(fit, questions = NULL, include_loo = TRUE) {
-  base_pars <- c("mu_vwin", "mu_vloss", "mu_omegaone", "mu_beta", "vwin", "vloss", "omegaone", "beta")
-  
-  # in case you add questionnaires as a parameter ie a regressor in the model to extract
-  if (!is.null(questions)) {
-    beta_pars <- unlist(lapply(questions, function(q) {
-      paste0("beta_", c("vwin", "vloss", "omegaone", "beta"), "_", q)
-    }))
-    pars <- c(base_pars, beta_pars)
-  } else {
-    pars <- base_pars
-  }
-  params_summary <- summary(fit, pars = pars)$summary
-  print(params_summary)
-
-}
-
-```
-
-
-# param_extract()
-```{r load function: make array for estimated parameters from stanfit summary}
-param_extract <- function(fit, sub_ids,
-                          pars = c("vwin","vloss","beta","omegaone")) {
-  sum_mat <- summary(fit, pars = pars)$summary
-  extract_stats <- function(param_name) {
-    rows   <- grep(paste0("^", param_name, "\\["), rownames(sum_mat))
-    means  <- sum_mat[rows, "mean"]
-    rhats  <- sum_mat[rows, "Rhat"]
-    list(mean = means, Rhat = rhats)
-  }
-  stats_list <- lapply(pars, extract_stats)
-  names(stats_list) <- pars
-  df <- data.frame(participant_id = sub_ids, stringsAsFactors = FALSE)
-  for (p in pars) {
-    df[[paste0(p)]] <- stats_list[[p]]$mean
-    df[[paste0(p, "_Rhat")]] <- stats_list[[p]]$Rhat
-  }
-  
-  return(df)
-}
-```
-
-```{r get omega}
-omega_out <- rstan::extract(test, pars = "omega_out",
-                            permuted = TRUE)$omega_out   # draws × subj × trial
-
-# draws collapsed → posterior mean per subj & trial
-omega_out_mean <- apply(omega_out, c(2, 3), mean)
-
-# check
-dim(omega_out_mean)            # should be  #subj × #trial
-omega_out_mean[1, ]            # now sensible values
-```
-
-
-```{r load fit}
-fit <- readRDS("/Users/zachtefertiller/Desktop/beta_split.rds")
+summary <- fit$summary()
+print(summary)
 ```
 
 
 ```{r looic}
-post <- rstan::extract(fit)
+log_lik_array <- fit$draws(variables = "log_lik", format="array")
+log_lik_array <- posterior::as_draws_array(log_lik_array)
 
-log_lik_array <- extract(fit, pars = "log_lik")$log_lik  # now dim = (iterations, nsub, ntrial)
+dim_array <- dim(log_lik_array)
 
-dim(log_lik_array) <- c(dim(log_lik_array)[1], dim(log_lik_array)[2] * dim(log_lik_array)[3])
+log_lik_matrix <- matrix(
+  log_lik_array,
+  nrow = dim_array[1] * dim_array[2],
+  ncol = dim_array[3]
+)
 
-loo_result <- loo(log_lik_array)
+loo_result <- loo(log_lik_matrix)
 print(loo_result)
 
 k_vals <- pareto_k_values(loo_result)
@@ -366,5 +250,76 @@ ggplot(data.frame(k = k_vals), aes(x = k)) +
     y = "Count"
   ) +
   theme_minimal()
+
+```
+
+
+
+
+
+```{r}
+#for copying stan csv files 
+file.copy(fit$output_files(),
+          to = "~/ztefertiller/bart_analyses/cmdstan_output/",
+          overwrite=TRUE
+)
+```
+
+```{r}
+folder_path <- "/media/ztefertiller/Transcend/cmdstan_output/stl_color"
+
+csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
+
+print(csv_files)
+stl_color <- as_cmdstan_fit(csv_files)
+```
+
+
+```{r looic}
+library(loo)
+
+log_lik_stl <- stl$draws("log_lik", format= "matrix")
+log_lik_stl <- posterior::as_draws_array(log_lik_stl)
+
+loo_stl <- loo(log_lik_stl)
+print(loo_stl)
+
+log_lik_ewmv <- ewmv$draws("log_lik", format= "matrix")
+log_lik_ewmv <- posterior::as_draws_array(log_lik_ewmv)
+
+loo_ewmv <- loo(log_lik_ewmv)
+print(loo_ewmv)
+
+log_lik_stl_color <- stl_color$draws("log_lik", format= "matrix")
+log_lik_stl_color <- posterior::as_draws_array(log_lik_stl_color)
+
+loo_stl_color <- loo(log_lik_stl_color)
+print(loo_stl_color)
+
+log_lik_4par <- fourpar$draws("log_lik", format= "matrix")
+log_lik_4par <- posterior::as_draws_array(log_lik_4par)
+
+loo_4par <- loo(log_lik_4par)
+print(loo_4par)
+
+
+loo_comparison <- loo_compare(loo_4par,loo_stl_color,loo_stl)
+
+loo_df <- as.data.frame(loo_comparison)
+loo_df$model <- rownames(loo_df)
+loo_df$elpd_diff <- as.numeric(loo_df$elpd_diff)
+loo_df$elpd_diff <- -1.0 * df$elpd_diff
+
+ggplot(df, aes(x= reorder(model,elpd_diff), y=elpd_diff)) +
+  geom_bar(stat= "identity", fill="steelblue") +
+  geom_errorbar(aes(ymin = elpd_diff - se_diff, ymax = elpd_diff + se_diff), width =0.2) +
+  coord_flip() +
+  labs(
+    x = "model",
+    y = "relative predictive accuracy",
+    title = "loo model comparison"
+  ) +
+  theme_minimal()
+
 
 ```
