@@ -1,0 +1,94 @@
+---
+title: "bart_pca"
+author: "Zach Tefertiller"
+date: "2025-05-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(factoextra)
+# Select and standardize the subscores
+df_pca_input <- df %>%
+  group_by(participant_id) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(participant_id, pdi_distress, pdi_frequency, pdi_conviction,
+         caps_distress, caps_frequency, caps_intrusiveness, phq_total, spq_total, mdq_total, ipip_total) %>%
+  column_to_rownames("participant_id") %>%
+  scale()
+
+
+pca_result <- prcomp(df_pca_input, center = TRUE, scale. = FALSE)
+summary(pca_result)
+
+fviz_pca_var(pca_result, col.var = "contrib")  # color by contribution to PCs
+
+pc_scores <- as.data.frame(pca_result$x[, 1, drop = FALSE])  # Only PC1
+pc_scores$participant_id <- rownames(pca_result$x)
+colnames(pc_scores)[1] <- "PC1_score"
+
+df <- df %>%
+  left_join(pc_scores, by = "participant_id")
+
+```
+
+```{r factor loadings}
+library(ggplot2)
+library(ggrepel)
+
+# Extract variance explained
+explained_var <- summary(pca_result)$importance["Proportion of Variance", 1:2] * 100
+pc1_label <- paste0("PC1 (", round(explained_var[1], 1), "%)")
+pc2_label <- paste0("PC2 (", round(explained_var[2], 1), "%)")
+
+# Loadings and contribution
+loadings <- as.data.frame(pca_result$rotation[, 1:2])
+loadings$var <- rownames(loadings)
+loadings$contrib <- (loadings$PC1^2 + loadings$PC2^2) * 100
+
+# Unit circle
+circle <- data.frame(
+  x = cos(seq(0, 2 * pi, length.out = 100)),
+  y = sin(seq(0, 2 * pi, length.out = 100))
+)
+
+# Plot with ggrepel
+ggplot() +
+  geom_path(data = circle, aes(x = x, y = y), color = "gray70", linetype = "dashed") +
+  
+  geom_segment(data = loadings,
+               aes(x = 0, y = 0, xend = PC1, yend = PC2, color = contrib),
+               arrow = arrow(length = unit(0.15, "cm")), size = 0.6) +
+
+  geom_text_repel(data = loadings,
+                  aes(x = PC1, y = PC2, label = var, color = contrib),
+                  size = 6,
+                  fontface = "bold",
+                  max.overlaps = 100,
+                  box.padding = 0.3,
+                  point.padding = 0.5,
+                  segment.color = "grey50",
+                  min.segment.length = 0) +
+  
+  scale_color_gradient(low = "blue", high = "red") +
+  xlim(-1.2, 1.2) + ylim(-1.2, 1.2) +
+  coord_fixed() +
+  labs(
+    title = "PCA Correlation Circle",
+    x = pc1_label,
+    y = pc2_label,
+    color = "Contribution (%)"
+  ) +
+  theme_bw(base_size = 18) +
+  theme(
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    plot.background = element_blank(),
+    axis.line = element_line(color = "black"),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+
+ggsave("pca_correlation_circle.png", width = 14, height = 14, dpi = 600, bg="white")
+```
