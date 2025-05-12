@@ -23,9 +23,10 @@ summary(pca_result)
 
 fviz_pca_var(pca_result, col.var = "contrib")  # color by contribution to PCs
 
-pc_scores <- as.data.frame(pca_result$x[, 1, drop = FALSE])  # Only PC1
-pc_scores$participant_id <- rownames(pca_result$x)
-colnames(pc_scores)[1] <- "PC1_score"
+pc_scores <- as.data.frame(pca_result$x[, 1:2])
+pc_scores$participant_id <- rownames(pca_result$x)  # extract rownames into column
+rownames(pc_scores) <- NULL  # optional: clean rownames
+colnames(pc_scores)[1:2] <- c("PC1_score", "PC2_score")
 
 df <- df %>%
   left_join(pc_scores, by = "participant_id")
