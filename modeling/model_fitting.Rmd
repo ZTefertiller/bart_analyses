@@ -22,7 +22,7 @@ library(cmdstanr)
 
 # initial setup for my own task design, adapt balloon_color in the code and dataset as needed.
 
-dataset <- read.csv('/home/BRAIN/ztefertiller/ztefertiller/balloon_task_clean_data.csv', header=TRUE, sep=",", stringsAsFactors=FALSE)
+dataset <- read.csv('balloon_task_clean_data.csv', header=TRUE, sep=",", stringsAsFactors=FALSE)
 
 # setup dataframe for reversal
 df <- dataset %>%
@@ -179,7 +179,7 @@ stan_data <- create_stan_params(df)
 ```{r cmdstan equivalent because of compiler issue or ARM}
 cmd_stan_fit <- function(data, fit_name = "default") {
   model_path <- "/home/BRAIN/ztefertiller/ztefertiller/bart_analyses/modeling/ewmv_vec.stan"
-  output_path <- paste0("/home/BRAIN/ztefertiller/ztefertiller/bart_analyses", fit_name, ".rds")
+  output_path <- paste0("/media/ztefertiller/MRS_rsfMRI/zach_mcmc", fit_name, ".rds")
   
   memory_used <- mem_change({
     mod <- cmdstan_model(model_path,  cpp_options = list(stan_threads = TRUE))
@@ -192,7 +192,7 @@ cmd_stan_fit <- function(data, fit_name = "default") {
       parallel_chains = 4,
       threads_per_chain = 7,
       seed = 10191998,
-      refresh = 500  # adjusts console output
+      refresh = 500,  # adjusts console output
     )
   })
 
@@ -203,6 +203,14 @@ cmd_stan_fit <- function(data, fit_name = "default") {
   return(fit)
 }
 
+
+ewmv <- cmd_stan_fit(stan_data, "ewmv")
+
+
+file.copy(ewmv$output_files(),
+          to = "/media/ztefertiller/MRS_rsfMRI/zach_mcmc",
+          overwrite=TRUE
+)
 ```
 
 ```{r}
@@ -266,10 +274,28 @@ file.copy(fit$output_files(),
 ```
 
 ```{r}
-folder_path <- "/media/ztefertiller/Transcend/cmdstan_output/stl_color"
+library(cmdstanr)
+library(bayesplot)
+library(loo)
+library(posterior)
 
+folder_path <- "/media/ztefertiller/Transcend/mcmc/fourpar"
 csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
+print(csv_files)
+fourpar <- as_cmdstan_fit(csv_files)
 
+folder_path <- "/media/ztefertiller/Transcend/mcmc/ewmv"
+csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
+print(csv_files)
+ewmv <- as_cmdstan_fit(csv_files)
+
+folder_path <- "/media/ztefertiller/Transcend/mcmc/stl"
+csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
+print(csv_files)
+stl <- as_cmdstan_fit(csv_files)
+
+folder_path <- "/media/ztefertiller/Transcend/mcmc/stl_color"
+csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
 print(csv_files)
 stl_color <- as_cmdstan_fit(csv_files)
 ```
@@ -303,12 +329,16 @@ loo_4par <- loo(log_lik_4par)
 print(loo_4par)
 
 
-loo_comparison <- loo_compare(loo_4par,loo_stl_color,loo_stl)
+loo_comparison <- loo_compare(
+              loo_4par,
+              loo_ewmv, 
+              loo_stl,
+              loo_stl_color
+              )
 
 loo_df <- as.data.frame(loo_comparison)
-loo_df$model <- rownames(loo_df)
 loo_df$elpd_diff <- as.numeric(loo_df$elpd_diff)
-loo_df$elpd_diff <- -1.0 * df$elpd_diff
+loo_df$elpd_diff <- -df$elpd_diff
 
 ggplot(df, aes(x= reorder(model,elpd_diff), y=elpd_diff)) +
   geom_bar(stat= "identity", fill="steelblue") +
