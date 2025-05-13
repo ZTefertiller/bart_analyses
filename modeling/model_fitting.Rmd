@@ -178,7 +178,7 @@ stan_data <- create_stan_params(df)
 
 ```{r cmdstan equivalent because of compiler issue or ARM}
 cmd_stan_fit <- function(data, fit_name = "default") {
-  model_path <- "/home/BRAIN/ztefertiller/ztefertiller/bart_analyses/modeling/ewmv_vec.stan"
+  model_path <- "ewmv_vec.stan"
   output_path <- paste0("/media/ztefertiller/MRS_rsfMRI/zach_mcmc", fit_name, ".rds")
   
   memory_used <- mem_change({
@@ -186,8 +186,8 @@ cmd_stan_fit <- function(data, fit_name = "default") {
     
     fit <- mod$sample(
       data = data,
-      iter_warmup = 2000,
-      iter_sampling = 6000,
+      iter_warmup = 20,
+      iter_sampling = 20,
       chains = 4,
       parallel_chains = 4,
       threads_per_chain = 7,
