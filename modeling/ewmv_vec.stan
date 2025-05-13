@@ -128,13 +128,12 @@ generated quantities {
     int n_succ = 0;
     int n_pump = 0;
     real p_burst = phi[j];
-    log_lik[j, k] = 0;
 
     for (k in 1:ntrial) {
       real u_gain = 1;
       real u_stop = 0;
       real u_loss, u_pump, delta_u;
-
+      log_lik[j, k] = 0;
       int max_decision = npumps[j, k] + 1 - outcome[j, k];
 
       for (l in 1:max_decision) {
