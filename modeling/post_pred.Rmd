@@ -65,3 +65,204 @@ main <- function(df) {
   }
 }
 ```
+
+
+
+```{r ewmv}
+# --- Setup ---
+library(cmdstanr)
+library(posterior)
+library(bayesplot)
+library(ggplot2)
+library(tibble)
+library(dplyr)
+library(purrr)
+library(tidyr)
+
+# Set output directory
+output_dir <- file.path(Sys.getenv("HOME"), "Desktop", "ewmv_ppc_trials")
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+# --- Extract Posterior Draws ---
+phi <- fit$draws("phi")
+eta <- fit$draws("eta")
+rho <- fit$draws("rho")
+tau <- fit$draws("tau")
+lambda <- fit$draws("lambda")
+
+# --- Prepare Data for Posterior Predictive Checks ---
+stan_data_ppc <- list(
+  nsub = stan_data$nsub,
+  ntrial = stan_data$ntrial,
+  maxpump = stan_data$maxpump,
+  npumps = stan_data$npumps,
+  outcome = stan_data$outcome,
+  d = stan_data$d
+)
+
+ewmv_ppc_model <- cmdstan_model("ewmv_ppc.stan")
+ewmv_ppc_fit <- ewmv_ppc_model$generate_quantities(
+  fitted_params = fit,
+  data = stan_data_ppc
+)
+
+# --- Extract and Reshape Predictions ---
+reshape_y_pred <- function(fit_draws, var = "y_pred", nsub, ntrial, maxpump) {
+  draw_matrix <- as_draws_matrix(fit_draws$draws(var))
+  array(draw_matrix, dim = c(nrow(draw_matrix), nsub, ntrial, maxpump))
+}
+
+y_array <- reshape_y_pred(ewmv_ppc_fit, "y_pred", stan_data_ppc$nsub, stan_data_ppc$ntrial, stan_data_ppc$maxpump)
+draws_total_pumps <- apply(y_array, c(1, 2, 3), function(x) sum(x == 1, na.rm = TRUE))
+
+# --- Subject-level PPC plots + CSVs ---
+ppc_plots <- list()
+ppc_summary_list <- list()
+participant_ids <- df$participant_id[!duplicated(df$participant_id)]
+
+for (subject_id in 1:dim(observed_total_pumps)[1]) {
+  yobs <- observed_total_pumps[subject_id, ]
+  yrep <- draws_total_pumps[, subject_id, ]
+
+  ppc_df <- tibble(
+    trial = 1:length(yobs),
+    subject_id = subject_id,
+    observed = yobs,
+    predicted_mean = colMeans(yrep),
+    predicted_lower = apply(yrep, 2, quantile, probs = 0.05),
+    predicted_upper = apply(yrep, 2, quantile, probs = 0.95)
+  )
+    participant_label <- participant_ids[subject_id]
+
+  p <- ggplot(ppc_df, aes(x = trial)) +
+    geom_ribbon(aes(ymin = predicted_lower, ymax = predicted_upper), fill = "lightblue", alpha = 0.5) +
+    geom_line(aes(y = predicted_mean, color = "EWMV"), size = 0.5) +
+    geom_line(aes(y = observed, color = "Observation"), linetype = "dashed", size = 0.5) +
+    scale_color_manual(name = "Source", values = c("EWMV" = "blue", "Observation" = "black")) +
+    labs(title = paste("Participant", participant_label), x = "Trial", y = "Number of Pumps") +
+    theme_minimal() +
+    theme(legend.position = "top")
+
+  ppc_plots[[subject_id]] <- p
+  ppc_summary_list[[subject_id]] <- ppc_df
+
+  participant_label <- stan_data$sub_ids[subject_id]
+  ggsave(file.path(output_dir, paste0("ewmv_ppc_", participant_label, ".png")), width = 6, height = 4, dpi = 600, bg = "white")
+
+}
+
+# Save full PPC summary to CSV
+ppc_all_df <- bind_rows(ppc_summary_list)
+write_csv(ppc_all_df, file.path(output_dir, "ppc_summary_all_subjects.csv"))
+
+# --- Trial-wise Scatterplots ---
+# Convert balloon color to labels
+balloon_color_labeled <- matrix(
+  dplyr::recode(stan_data$balloon_color,
+                `1` = "blue", `2` = "orange", `3` = "yellow"),
+  nrow = stan_data$nsub,
+  ncol = stan_data$ntrial
+)
+
+scatter_df <- tibble()
+for (subject_id in 1:dim(observed_total_pumps)[1]) {
+  yobs <- observed_total_pumps[subject_id, ]
+  yrep <- draws_total_pumps[, subject_id, ]
+  color_labels <- balloon_color_labeled[subject_id, ]
+
+  subject_df <- tibble(
+    subject_id = subject_id,
+    trial = 1:length(yobs),
+    observed = yobs,
+    predicted = colMeans(yrep),
+    balloon_color = color_labels
+  )
+
+  scatter_df <- bind_rows(scatter_df, subject_df)
+}
+
+# Save scatter data
+write_csv(scatter_df, file.path(output_dir, "scatter_all_data.csv"))
+
+create_trial_scatter <- function(trial_number, data) {
+  trial_data <- filter(data, trial == trial_number)
+  cor_val <- cor(trial_data$observed, trial_data$predicted, use = "complete.obs")
+  cor_text <- sprintf("r = %.3f", cor_val)
+
+  max_val <- max(c(trial_data$observed, trial_data$predicted), na.rm = TRUE)
+  min_val <- min(c(trial_data$observed, trial_data$predicted), na.rm = TRUE)
+
+  ggplot(trial_data, aes(x = predicted, y = observed, color = balloon_color)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
+    geom_point(alpha = 0.7) +
+    annotate("text", x = min_val + 0.1 * (max_val - min_val), 
+             y = max_val - 0.1 * (max_val - min_val), label = cor_text) +
+    coord_fixed(ratio = 1) +
+    scale_color_manual(values = c("blue" = "blue", "orange" = "orange", "yellow" = "gold")) +
+    labs(
+      title = paste("Trial", trial_number),
+      x = "Predicted Number of Pumps",
+      y = "Observed Number of Pumps",
+      color = "Balloon Color"
+    ) +
+    theme_minimal()
+}
+
+for (t in unique(scatter_df$trial)) {
+  p <- create_trial_scatter(t, scatter_df)
+  ggsave(
+    filename = file.path(output_dir, paste0("trial_", sprintf("%03d", t), "_scatter.png")),
+    plot = p,
+    width = 6,
+    height = 6,
+    dpi = 600,
+    bg = "white"
+  )
+}
+
+# --- Aggregate Color-wise Scatterplots ---
+create_color_scatter <- function(color_name, data) {
+  color_data <- filter(data, balloon_color == color_name)
+  cor_val <- cor(color_data$observed, color_data$predicted, use = "complete.obs")
+  cor_text <- sprintf("r = %.3f", cor_val)
+
+  max_val <- max(c(color_data$observed, color_data$predicted), na.rm = TRUE)
+  min_val <- min(c(color_data$observed, color_data$predicted), na.rm = TRUE)
+
+  ggplot(color_data, aes(x = predicted, y = observed)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
+    geom_point(color = color_name, alpha = 0.5) +
+    annotate("text", x = min_val + 0.1 * (max_val - min_val), 
+             y = max_val - 0.1 * (max_val - min_val), label = cor_text) +
+    coord_fixed(ratio = 1) +
+    scale_x_continuous(limits = c(min_val, max_val)) +
+    scale_y_continuous(limits = c(min_val, max_val)) +
+    labs(
+      title = paste("All", color_name, "Trials"),
+      x = "Predicted Number of Pumps",
+      y = "Observed Number of Pumps"
+    ) +
+    theme_minimal()
+}
+
+for (color in c("blue", "orange", "yellow")) {
+  p <- create_color_scatter(color, scatter_df)
+  ggsave(
+    filename = file.path(output_dir, paste0("scatter_all_", color, ".png")),
+    plot = p,
+    width = 6,
+    height = 6,
+    dpi = 600,
+    bg = "white"
+  )
+}
+
+
+
+```
+
+
+
+
+
+
