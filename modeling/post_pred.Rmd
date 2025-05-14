@@ -8,12 +8,16 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(dplyr)
+library(cmdstanr)
+library(posterior)
 library(bayesplot)
 library(ggplot2)
-library(rstan)
+library(tibble)
+library(dplyr)
 library(pryr)
-library(loo)
+library(purrr)
+library(tidyr)
+library(readr)
 ```
 
 
@@ -69,16 +73,6 @@ main <- function(df) {
 
 
 ```{r ewmv}
-# --- Setup ---
-library(cmdstanr)
-library(posterior)
-library(bayesplot)
-library(ggplot2)
-library(tibble)
-library(dplyr)
-library(purrr)
-library(tidyr)
-
 # Set output directory
 output_dir <- file.path(Sys.getenv("HOME"), "Desktop", "ewmv_ppc_trials")
 if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
@@ -112,13 +106,26 @@ reshape_y_pred <- function(fit_draws, var = "y_pred", nsub, ntrial, maxpump) {
   array(draw_matrix, dim = c(nrow(draw_matrix), nsub, ntrial, maxpump))
 }
 
-y_array <- reshape_y_pred(ewmv_ppc_fit, "y_pred", stan_data_ppc$nsub, stan_data_ppc$ntrial, stan_data_ppc$maxpump)
-draws_total_pumps <- apply(y_array, c(1, 2, 3), function(x) sum(x == 1, na.rm = TRUE))
+observed_total_pumps <- stan_data$npumps
+raw_array <- ewmv_ppc_fit$draws("total_pumps", format = "draws_array")  # dimensions: iterations x chains x variables
+
+# Flatten draws to iterations (combine chains)
+draw_matrix <- as_draws_matrix(raw_array)  # dimensions: (iterations * chains) × (nsub * ntrial)
+
+# Reshape to [iterations, nsub, ntrial]
+nsub <- stan_data$nsub
+ntrial <- stan_data$ntrial
+n_iter <- nrow(draw_matrix)
+
+draws_total_pumps <- array(draw_matrix, dim = c(n_iter, nsub, ntrial))# dims: iterations x nsub x ntrial
 
 # --- Subject-level PPC plots + CSVs ---
 ppc_plots <- list()
 ppc_summary_list <- list()
 participant_ids <- df$participant_id[!duplicated(df$participant_id)]
+
+dim(draws_total_pumps)
+dim(observed_total_pumps)
 
 for (subject_id in 1:dim(observed_total_pumps)[1]) {
   yobs <- observed_total_pumps[subject_id, ]
