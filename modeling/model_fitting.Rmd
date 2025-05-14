@@ -19,6 +19,8 @@ library(ggplot2)
 library(pryr)
 library(loo)
 library(cmdstanr)
+library(posterior)
+
 
 # initial setup for my own task design, adapt balloon_color in the code and dataset as needed.
 
@@ -179,15 +181,16 @@ stan_data <- create_stan_params(df)
 ```{r cmdstan equivalent because of compiler issue or ARM}
 cmd_stan_fit <- function(data, fit_name = "default") {
   model_path <- "ewmv_vec.stan"
-  output_path <- paste0("/media/ztefertiller/MRS_rsfMRI/zach_mcmc", fit_name, ".rds")
-  
+  #output_path <- paste0("/media/ztefertiller/MRS_rsfMRI/zach_mcmc", fit_name, ".rds")
+  output_path <- paste0("~/desktop", fit_name, ".rds")
+
   memory_used <- mem_change({
     mod <- cmdstan_model(model_path,  cpp_options = list(stan_threads = TRUE))
     
     fit <- mod$sample(
       data = data,
-      iter_warmup = 20,
-      iter_sampling = 20,
+      iter_warmup = 100,
+      iter_sampling = 100,
       chains = 4,
       parallel_chains = 4,
       threads_per_chain = 7,
@@ -207,10 +210,10 @@ cmd_stan_fit <- function(data, fit_name = "default") {
 ewmv <- cmd_stan_fit(stan_data, "ewmv")
 
 
-file.copy(ewmv$output_files(),
-          to = "/media/ztefertiller/MRS_rsfMRI/zach_mcmc",
-          overwrite=TRUE
-)
+# file.copy(ewmv$output_files(),
+#           to = "/media/ztefertiller/MRS_rsfMRI/zach_mcmc",
+#           overwrite=TRUE
+# )
 ```
 
 ```{r}
@@ -218,7 +221,6 @@ ewmv <- cmd_stan_fit(stan_data, "ewmv")
 ```
 
 ```{r}
-library(posterior)
 variables <- fit$draws() %>% variables()
 
 group_params <- grep("mu", variables, value=TRUE)
@@ -231,6 +233,7 @@ print(summary)
 
 
 ```{r looic}
+# loo diagnostic for one model
 log_lik_array <- fit$draws(variables = "log_lik", format="array")
 log_lik_array <- posterior::as_draws_array(log_lik_array)
 
@@ -279,6 +282,8 @@ library(bayesplot)
 library(loo)
 library(posterior)
 
+# assembling fit objects from csv data
+
 folder_path <- "/media/ztefertiller/Transcend/mcmc/fourpar"
 csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
 print(csv_files)
@@ -302,6 +307,7 @@ stl_color <- as_cmdstan_fit(csv_files)
 
 
 ```{r looic}
+# loo comparison between models 
 library(loo)
 
 log_lik_stl <- stl$draws("log_lik", format= "matrix")
