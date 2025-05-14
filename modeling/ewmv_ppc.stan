@@ -27,7 +27,7 @@ generated quantities {
   vector<lower=0>[nsub] tau;
   vector<lower=0>[nsub] lambda;
 
-  array[nsub, ntrial, maxpump] int y_pred;
+  array[nsub, ntrial] int total_pumps;
 
   for (j in 1:nsub) {
     phi[j]    = Phi_approx(mu_pr[1] + sigma[1] * phi_pr[j]);
@@ -49,6 +49,7 @@ generated quantities {
       real u_pump;
       real delta_u;
 
+      int pumps_this_trial = 0;
       int max_decision = npumps[j, k] + 1 - outcome[j, k];
 
       for (l in 1:max_decision) {
@@ -59,11 +60,16 @@ generated quantities {
                    + rho[j] * p_burst * (1 - p_burst) * square(u_gain + lambda[j] * u_loss);
           delta_u = u_pump - u_stop;
 
-          y_pred[j, k, l] = bernoulli_logit_rng(tau[j] * delta_u);
-        } else {
-          y_pred[j, k, l] = -1;  // ignore placeholder
+          int choice = bernoulli_logit_rng(tau[j] * delta_u);
+          if (choice == 1) {
+            pumps_this_trial += 1;
+          } else {
+            break;
+          }
         }
       }
+
+      total_pumps[j, k] = pumps_this_trial;
 
       n_succ += npumps[j, k] - outcome[j, k];
       n_pump += npumps[j, k];
