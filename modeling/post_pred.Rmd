@@ -269,6 +269,127 @@ for (color in c("blue", "orange", "yellow")) {
 ```
 
 
+```{r STL color}
+# ---- Setup ----
+output_dir <- file.path(Sys.getenv("HOME"), "Desktop", "stl_ppc")
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# ---- Load your STL fit and Stan data ----
+# Replace with actual paths or objects
+#fit <- read_cmdstan_csv("path_to_your_generated_quantities.csv")  # update
+#stan_data <- readRDS("path_to_stan_data.rds")  # must contain npumps, balloon_color, etc.
+
+fit <- stl_freemax
+
+# ---- Extract predictions ----
+nsub <- stan_data$nsub
+ntrial <- stan_data$ntrial
+
+# observed data
+observed_npumps <- stan_data$npumps
+balloon_color <- stan_data$balloon_color
+participant_ids <- stan_data$sub_ids
+
+# predicted pumps from generated quantities
+draws_npumps <- fit$draws("npumps_saved", format = "draws_matrix")
+n_iter <- nrow(draws_npumps)
+
+npumps_array <- array(draws_npumps, dim = c(n_iter, nsub, ntrial))
+
+# ---- PPC per subject ----
+ppc_summary_list <- list()
+
+for (subject_id in 1:nsub) {
+  yobs <- observed_npumps[subject_id, ]
+  yrep <- npumps_array[, subject_id, ]
+  
+  ppc_df <- tibble(
+    trial = 1:ntrial,
+    subject_id = subject_id,
+    observed = yobs,
+    predicted_mean = colMeans(yrep),
+    predicted_lower = apply(yrep, 2, quantile, probs = 0.05),
+    predicted_upper = apply(yrep, 2, quantile, probs = 0.95)
+  )
+
+  p <- ggplot(ppc_df, aes(x = trial)) +
+    geom_ribbon(aes(ymin = predicted_lower, ymax = predicted_upper), fill = "lightblue", alpha = 0.5) +
+    geom_line(aes(y = predicted_mean, color = "STL"), size = 0.5) +
+    geom_line(aes(y = observed, color = "Observation"), linetype = "dashed", size = 0.5) +
+    scale_color_manual(name = "Source", values = c("STL" = "blue", "Observation" = "black")) +
+    labs(title = paste("Participant", participant_ids[subject_id]), x = "Trial", y = "Inflations") +
+    theme_minimal()
+
+  ggsave(file.path(output_dir, paste0("ppc_", participant_ids[subject_id], ".png")), plot = p,
+         width = 6, height = 4, dpi = 600, bg = "white")
+
+  ppc_summary_list[[subject_id]] <- ppc_df
+}
+
+ppc_all_df <- bind_rows(ppc_summary_list)
+write_csv(ppc_all_df, file.path(output_dir, "ppc_summary_all_subjects.csv"))
+
+# ---- Color-coded scatter data ----
+color_labels <- matrix(dplyr::recode(balloon_color, `1` = "blue", `2` = "orange", `3` = "yellow"),
+                       nrow = nsub, ncol = ntrial)
+
+scatter_df <- tibble()
+
+for (subject_id in 1:nsub) {
+  yobs <- observed_npumps[subject_id, ]
+  yrep <- npumps_array[, subject_id, ]
+  color_vec <- color_labels[subject_id, ]
+
+  temp <- tibble(
+    subject_id = subject_id,
+    trial = 1:ntrial,
+    observed = yobs,
+    predicted = colMeans(yrep),
+    balloon_color = color_vec
+  )
+
+  scatter_df <- bind_rows(scatter_df, temp)
+}
+
+write_csv(scatter_df, file.path(output_dir, "scatter_all_data.csv"))
+
+# ---- RMSE and MAE per subject ----
+error_df <- scatter_df %>%
+  group_by(subject_id) %>%
+  summarise(
+    RMSE = sqrt(mean((observed - predicted)^2, na.rm = TRUE)),
+    MAE  = mean(abs(observed - predicted), na.rm = TRUE)
+  )
+
+write_csv(error_df, file.path(output_dir, "stl_rmse_mae_per_subject.csv"))
+
+# ---- Plot aggregate color scatter ----
+create_color_scatter <- function(color_name, data) {
+  df <- filter(data, balloon_color == color_name)
+  cor_val <- cor(df$observed, df$predicted, use = "complete.obs")
+  cor_text <- sprintf("r = %.3f", cor_val)
+
+  ggplot(df, aes(x = predicted, y = observed)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
+    geom_point(color = color_name, alpha = 0.6) +
+    annotate("text", x = min(df$predicted), y = max(df$observed), label = cor_text) +
+    coord_fixed(ratio = 1) +
+    labs(
+      title = paste("All", color_name, "Trials"),
+      x = "Predicted Pumps",
+      y = "Observed Pumps"
+    ) +
+    theme_minimal()
+}
+
+for (color in c("blue", "orange", "yellow")) {
+  p <- create_color_scatter(color, scatter_df)
+  ggsave(file.path(output_dir, paste0("scatter_all_", color, ".png")), p,
+         width = 6, height = 6, dpi = 600, bg = "white")
+}
+```
+
+
 
 
 
