@@ -4,32 +4,34 @@
 
 functions {
   real partial_log_lik(array[] int slice_subj_idx,
-                       int start,
-                       int end,
-                       array[,] int outcome,
-                       array[,] int npumps,
-                       array[,] int opportunity,
-                       array[,] int nmax,
-                       array[,] int balloon_color,
-                       array[,,] int d,
-                       vector b_vwin_pre,
-                       vector b_vwin_post,
-                       vector b_vloss_pre,
-                       vector b_vloss_post,
-                       vector b_beta_pre,
-                       vector b_beta_post,
-                       vector b_omegaone,
-                       vector o_vwin_pre,
-                       vector o_vwin_post,
-                       vector o_vloss_pre,
-                       vector o_vloss_post,
-                       vector o_beta_pre,
-                       vector o_beta_post,
-                       vector o_omegaone,
-                       vector y_vwin,
-                       vector y_vloss,
-                       vector y_omegaone,
-                       vector y_beta) {
+                     int start,
+                     int end,
+                     array[,] int outcome,
+                     array[,] int npumps,
+                     array[,] int opportunity,
+                     array[,] int balloon_color,
+                     array[,,] int d,
+                     vector b_vwin_pre,
+                     vector b_vwin_post,
+                     vector b_vloss_pre,
+                     vector b_vloss_post,
+                     vector b_beta_pre,
+                     vector b_beta_post,
+                     vector b_omegaone,
+                     vector o_vwin_pre,
+                     vector o_vwin_post,
+                     vector o_vloss_pre,
+                     vector o_vloss_post,
+                     vector o_beta_pre,
+                     vector o_beta_post,
+                     vector o_omegaone,
+                     vector y_vwin,
+                     vector y_vloss,
+                     vector y_omegaone,
+                     vector y_beta,
+                     vector blue_max,
+                     vector orange_max,
+                     vector yellow_max) {
     
     real ll = 0;
     int ntrial = dims(outcome)[2];
@@ -54,22 +56,25 @@ functions {
 
       for (k in 1:ntrial) {
         int color = balloon_color[subj, k];
+        real nmax_k = (balloon_color[subj, k] == 1) ? blue_max[subj] :
+              (balloon_color[subj, k] == 2) ? orange_max[subj] :
+                                             yellow_max[subj];
 
         // blue = 1
         if (color == 1) {
           if (last_blue == 0)
-            omega_blue[k] = nmax[subj, k] * b_omegaone[subj];
+            omega_blue[k] = nmax_k * b_omegaone[subj];
           else {
             real vloss = (k < 91 ? b_vloss_pre[subj] : b_vloss_post[subj]);
             real vwin  = (k < 91 ? b_vwin_pre[subj]  : b_vwin_post[subj]);
             if (outcome[subj, last_blue] == 1) {
-              omega_blue[k] = nmax[subj,k] *
-                (omega_blue[last_blue] / nmax[subj,last_blue]) *
-                (1 - vloss * (1 - npumps[subj, last_blue] * 1.0 / nmax[subj,last_blue]));
+              omega_blue[k] = nmax_k *
+                (omega_blue[last_blue] / nmax_k) *
+                (1 - vloss * (1 - npumps[subj, last_blue] * 1.0 / nmax_k));
             } else {
-              omega_blue[k] = nmax[subj,k] *
-                (omega_blue[last_blue] / nmax[subj,last_blue]) *
-                (1 + vwin  * (     npumps[subj, last_blue] * 1.0 / nmax[subj,last_blue]));
+              omega_blue[k] = nmax_k *
+                (omega_blue[last_blue] / nmax_k) *
+                (1 + vwin  * (     npumps[subj, last_blue] * 1.0 / nmax_k));
             }
           }
           last_blue = k;
@@ -78,18 +83,18 @@ functions {
         // orange = 2
         else if (color == 2) {
           if (last_orange == 0)
-            omega_orange[k] = nmax[subj, k] * o_omegaone[subj];
+            omega_orange[k] = nmax_k * o_omegaone[subj];
           else {
             real vloss = (k < 91 ? o_vloss_pre[subj] : o_vloss_post[subj]);
             real vwin  = (k < 91 ? o_vwin_pre[subj]  : o_vwin_post[subj]);
             if (outcome[subj, last_orange] == 1) {
-              omega_orange[k] = nmax[subj,k] *
-                (omega_orange[last_orange] / nmax[subj,last_orange]) *
-                (1 - vloss * (1 - npumps[subj, last_orange] * 1.0 / nmax[subj,last_orange]));
+              omega_orange[k] = nmax_k *
+                (omega_orange[last_orange] / nmax_k) *
+                (1 - vloss * (1 - npumps[subj, last_orange] * 1.0 / nmax_k));
             } else {
-              omega_orange[k] = nmax[subj,k] *
-                (omega_orange[last_orange] / nmax[subj,last_orange]) *
-                (1 + vwin  * (     npumps[subj, last_orange] * 1.0 / nmax[subj,last_orange]));
+              omega_orange[k] = nmax_k *
+                (omega_orange[last_orange] / nmax_k) *
+                (1 + vwin  * (     npumps[subj, last_orange] * 1.0 / nmax_k));
             }
           }
           last_orange = k;
@@ -98,18 +103,18 @@ functions {
         // yellow = 3
         else if (color == 3) {
           if (last_yellow == 0)
-            omega_yellow[k] = nmax[subj, k] * y_omegaone[subj];
+            omega_yellow[k] = nmax_k * y_omegaone[subj];
           else {
             real vloss = y_vloss[subj];
             real vwin  = y_vwin[subj];
             if (outcome[subj, last_yellow] == 1) {
-              omega_yellow[k] = nmax[subj,k] *
-                (omega_yellow[last_yellow] / nmax[subj,last_yellow]) *
-                (1 - vloss * (1 - npumps[subj, last_yellow] * 1.0 / nmax[subj,last_yellow]));
+              omega_yellow[k] = nmax_k *
+                (omega_yellow[last_yellow] / nmax_k) *
+                (1 - vloss * (1 - npumps[subj, last_yellow] * 1.0 / nmax_k));
             } else {
-              omega_yellow[k] = nmax[subj,k] *
-                (omega_yellow[last_yellow] / nmax[subj,last_yellow]) *
-                (1 + vwin  * (     npumps[subj, last_yellow] * 1.0 / nmax[subj,last_yellow]));
+              omega_yellow[k] = nmax_k *
+                (omega_yellow[last_yellow] / nmax_k) *
+                (1 + vwin  * (     npumps[subj, last_yellow] * 1.0 / nmax_k));
             }
           }
           last_yellow = k;
@@ -157,7 +162,6 @@ data {
   array[nsub, ntrial] int<lower=0, upper=1> outcome;
   array[nsub, ntrial] int<lower=0> npumps;
   array[nsub, ntrial] int<lower=1> opportunity;
-  array[nsub, ntrial] int nmax;  // color-specific maximum values
   int<lower=1> maxpump;  // overall maximum pump opportunity (e.g., 128)
   array[nsub, ntrial] int<lower=1, upper=3> balloon_color;
     // blue is 1
@@ -193,14 +197,16 @@ parameters {
   real<lower=0> y_mu_beta;
   real<lower=0,upper=1> y_mu_omegaone;
 
-  
-  
+  real<lower=0.0001, upper=100> mu_blue_max;
+  real<lower=0.0001,upper=100> mu_orange_max;
+  real<lower=0.0001,upper=100> mu_yellow_max;
+
   // need different variance term for each parameter
   // sigma is a vector of those variance terms
   // 1-7 Blue (vwin_pre, vloss_pre, omegaone, beta, vwin_post, vloss_post)
   // 8-14 Orange (vwin_pre, vloss_pre, omegaone, beta, vwin_post, vloss_post)
   // 15-18 Yellow (vwin, vloss, omegaone, beta )
-  vector<lower=0>[18] sigma;
+  vector<lower=0>[21] sigma;
   
 
   // subject level parameters by color
@@ -224,6 +230,11 @@ parameters {
   vector<lower=0,upper=1>[nsub] y_vloss;
   vector<lower=0,upper=1>[nsub] y_omegaone;
   vector<lower=0,upper=3>[nsub] y_beta;
+  
+  vector<lower=0.0001,upper=100>[nsub] blue_max;
+  vector<lower=0.0001,upper=100>[nsub] orange_max;
+  vector<lower=0.0001,upper=100>[nsub] yellow_max;
+
 }
 
 model {
@@ -248,6 +259,10 @@ model {
   y_mu_vloss      ~ normal(0, 1);
   y_mu_omegaone   ~ normal(0, 1);
   y_mu_beta       ~ normal(0, 1);
+  
+  blue_max        ~ normal(0, 1);
+  orange_max      ~ normal(0, 1);
+  yellow_max      ~ normal(0, 1);
 
   sigma ~ inv_gamma(1, 1);
 
@@ -273,6 +288,11 @@ model {
     y_vloss[i]       ~ normal(y_mu_vloss, sigma[16]);
     y_omegaone[i]    ~ normal(y_mu_omegaone, sigma[17]);
     y_beta[i]        ~ normal(y_mu_beta, sigma[18]);
+    
+    blue_max[i]      ~ normal(mu_blue_max, sigma[19]);
+    orange_max[i]      ~ normal(mu_orange_max, sigma[20]);
+    yellow_max[i]      ~ normal(mu_yellow_max, sigma[21]);
+
   }
 
   // likelihood
@@ -285,12 +305,13 @@ model {
     
     target += reduce_sum(
       partial_log_lik, subj_idx, 1,
-      outcome, npumps, opportunity, nmax, balloon_color, d,
-      b_vwin_pre, b_vwin_post, b_vloss_pre, b_vloss_post,
+      outcome, npumps, opportunity, balloon_color, d,  
+      b_vwin_pre, b_vwin_post, b_vloss_pre, b_vloss_post,  
       b_beta_pre, b_beta_post, b_omegaone,
       o_vwin_pre, o_vwin_post, o_vloss_pre, o_vloss_post,
       o_beta_pre, o_beta_post, o_omegaone,
-      y_vwin, y_vloss, y_omegaone, y_beta
+      y_vwin, y_vloss, y_omegaone, y_beta,
+      blue_max, orange_max, yellow_max  
     );
   }
 }
@@ -303,7 +324,8 @@ model {
 generated quantities {
   array[nsub, ntrial] real omega_out;
   array[nsub, ntrial] real log_lik;
-
+  array[nsub, ntrial] int npumps_saved;  
+  
   for (i in 1:nsub) {
     // We need to calculate the omega values again here
     vector[ntrial] omega_blue;
@@ -325,22 +347,27 @@ generated quantities {
     // First calculate all omega values
     for (k in 1:ntrial) {
       int color = balloon_color[i, k];
-      
+      real nmax_k = (balloon_color[i, k] == 1) ? blue_max[i] :
+              (balloon_color[i, k] == 2) ? orange_max[i] :
+                                             yellow_max[i];
+                                             
+      npumps_saved[i, k] = npumps[i, k];
+        
       // blue = 1
       if (color == 1) {
         if (last_blue == 0)
-          omega_blue[k] = nmax[i, k] * b_omegaone[i];
+          omega_blue[k] = nmax_k * b_omegaone[i];
         else {
           real vloss = (k < 91 ? b_vloss_pre[i] : b_vloss_post[i]);
           real vwin  = (k < 91 ? b_vwin_pre[i]  : b_vwin_post[i]);
           if (outcome[i, last_blue] == 1) {
-            omega_blue[k] = nmax[i,k] *
-              (omega_blue[last_blue] / nmax[i,last_blue]) *
-              (1 - vloss * (1 - npumps[i, last_blue] * 1.0 / nmax[i,last_blue]));
+            omega_blue[k] = nmax_k *
+              (omega_blue[last_blue] / nmax_k) *
+              (1 - vloss * (1 - npumps[i, last_blue] * 1.0 / nmax_k));
           } else {
-            omega_blue[k] = nmax[i,k] *
-              (omega_blue[last_blue] / nmax[i,last_blue]) *
-              (1 + vwin  * (     npumps[i, last_blue] * 1.0 / nmax[i,last_blue]));
+            omega_blue[k] = nmax_k *
+              (omega_blue[last_blue] / nmax_k) *
+              (1 + vwin  * (     npumps[i, last_blue] * 1.0 / nmax_k));
           }
         }
         last_blue = k;
@@ -349,18 +376,18 @@ generated quantities {
       // orange = 2
       else if (color == 2) {
         if (last_orange == 0)
-          omega_orange[k] = nmax[i, k] * o_omegaone[i];
+          omega_orange[k] = nmax_k * o_omegaone[i];
         else {
           real vloss = (k < 91 ? o_vloss_pre[i] : o_vloss_post[i]);
           real vwin  = (k < 91 ? o_vwin_pre[i]  : o_vwin_post[i]);
           if (outcome[i, last_orange] == 1) {
-            omega_orange[k] = nmax[i,k] *
-              (omega_orange[last_orange] / nmax[i,last_orange]) *
-              (1 - vloss * (1 - npumps[i, last_orange] * 1.0 / nmax[i,last_orange]));
+            omega_orange[k] = nmax_k *
+              (omega_orange[last_orange] / nmax_k) *
+              (1 - vloss * (1 - npumps[i, last_orange] * 1.0 / nmax_k));
           } else {
-            omega_orange[k] = nmax[i,k] *
-              (omega_orange[last_orange] / nmax[i,last_orange]) *
-              (1 + vwin  * (     npumps[i, last_orange] * 1.0 / nmax[i,last_orange]));
+            omega_orange[k] = nmax_k *
+              (omega_orange[last_orange] / nmax_k) *
+              (1 + vwin  * (     npumps[i, last_orange] * 1.0 / nmax_k));
           }
         }
         last_orange = k;
@@ -369,18 +396,18 @@ generated quantities {
       // yellow = 3
       else if (color == 3) {
         if (last_yellow == 0)
-          omega_yellow[k] = nmax[i, k] * y_omegaone[i];
+          omega_yellow[k] = nmax_k * y_omegaone[i];
         else {
           real vloss = y_vloss[i];
           real vwin  = y_vwin[i];
           if (outcome[i, last_yellow] == 1) {
-            omega_yellow[k] = nmax[i,k] *
-              (omega_yellow[last_yellow] / nmax[i,last_yellow]) *
-              (1 - vloss * (1 - npumps[i, last_yellow] * 1.0 / nmax[i,last_yellow]));
+            omega_yellow[k] = nmax_k *
+              (omega_yellow[last_yellow] / nmax_k) *
+              (1 - vloss * (1 - npumps[i, last_yellow] * 1.0 / nmax_k));
           } else {
-            omega_yellow[k] = nmax[i,k] *
-              (omega_yellow[last_yellow] / nmax[i,last_yellow]) *
-              (1 + vwin  * (     npumps[i, last_yellow] * 1.0 / nmax[i,last_yellow]));
+            omega_yellow[k] = nmax_k *
+              (omega_yellow[last_yellow] / nmax_k) *
+              (1 + vwin  * (     npumps[i, last_yellow] * 1.0 / nmax_k));
           }
         }
         last_yellow = k;
