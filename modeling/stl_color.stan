@@ -34,11 +34,10 @@ functions {
     real ll = 0;
     int ntrial = dims(outcome)[2];
     
-    // Process each subject in the slice - be careful with indexing
     for (i in 1:size(slice_subj_idx)) {
-      int subj = slice_subj_idx[i]; // Get the subject index from the slice
+      int subj = slice_subj_idx[i]; 
       
-      // Track omega dynamically by color
+      // track omega dynamically by color
       vector[ntrial] omega_blue;
       vector[ntrial] omega_orange;
       vector[ntrial] omega_yellow;
@@ -47,7 +46,6 @@ functions {
       int last_orange = 0;
       int last_yellow = 0;
 
-      // First, initialize all omega values to avoid potential access issues
       for (k in 1:ntrial) {
         omega_blue[k] = 0.0;
         omega_orange[k] = 0.0;
@@ -137,11 +135,10 @@ functions {
 
         int opp = opportunity[subj, k];
         
-        // Safety check to avoid indexing errors
+        // safety check to avoid indexing errors
         if (opp > 0) {
           row_vector[opp] n_idx = linspaced_row_vector(opp, 1, opp);
           
-          // Only evaluate if the array dimensions match
           if (dims(d)[3] >= opp) {
             ll += bernoulli_logit_lpmf(d[subj, k, 1:opp] | -beta_k * (n_idx - omega_k));
           }

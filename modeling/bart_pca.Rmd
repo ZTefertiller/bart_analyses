@@ -13,7 +13,7 @@ df_pca_input <- df %>%
   slice(1) %>%
   ungroup() %>%
   select(participant_id, pdi_distress, pdi_frequency, pdi_conviction,
-         caps_distress, caps_frequency, caps_intrusiveness, phq_total, spq_total, mdq_total, ipip_total) %>%
+         caps_distress, caps_frequency, caps_intrusiveness, phq_total, spq_total, mdq_total) %>%
   column_to_rownames("participant_id") %>%
   scale()
 

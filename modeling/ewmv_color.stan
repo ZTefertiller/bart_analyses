@@ -212,7 +212,7 @@ generated quantities {
           delta_u = u_pump - u_stop;
 
           log_lik[j] += bernoulli_logit_lpmf(d[j, k, l] | tau[j] * delta_u);
-          y_pred[j, k, l] = bernoulli_logit_rng(tau[j] * delta_u);
+          // y_pred[j, k, l] = bernoulli_logit_rng(tau[j] * delta_u);  
         }
 
         // Update n_succ and n_pump after each trial ends
