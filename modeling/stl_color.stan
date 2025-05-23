@@ -324,7 +324,7 @@ model {
 generated quantities {
   array[nsub, ntrial] real omega_out;
   array[nsub, ntrial] real log_lik;
-  array[nsub, ntrial] int npumps_saved;  
+  array[nsub, ntrial] int npumps_saved;  // now holds model-predicted pumps
   
   for (i in 1:nsub) {
     // We need to calculate the omega values again here
@@ -336,23 +336,22 @@ generated quantities {
     int last_orange = 0;
     int last_yellow = 0;
     
-    // Initialize all omega values
+    // Initialize all omega values and predictions
     for (k in 1:ntrial) {
-      omega_blue[k] = 0.0;
+      omega_blue[k]   = 0.0;
       omega_orange[k] = 0.0;
       omega_yellow[k] = 0.0;
-      log_lik[i,k] = 0.0;  // Initialize log_lik
+      log_lik[i,k]    = 0.0;
+      npumps_saved[i,k] = 0;            // initialize prediction to zero
     }
     
-    // First calculate all omega values
+    // First calculate all omega values (unchanged)
     for (k in 1:ntrial) {
-      int color = balloon_color[i, k];
-      real nmax_k = (balloon_color[i, k] == 1) ? blue_max[i] :
-              (balloon_color[i, k] == 2) ? orange_max[i] :
-                                             yellow_max[i];
-                                             
-      npumps_saved[i, k] = npumps[i, k];
-        
+      int color  = balloon_color[i, k];
+      real nmax_k = (color == 1) ? blue_max[i] :
+                    (color == 2) ? orange_max[i] :
+                                   yellow_max[i];
+      
       // blue = 1
       if (color == 1) {
         if (last_blue == 0)
@@ -394,7 +393,7 @@ generated quantities {
       }
       
       // yellow = 3
-      else if (color == 3) {
+      else { // color == 3
         if (last_yellow == 0)
           omega_yellow[k] = nmax_k * y_omegaone[i];
         else {
@@ -414,11 +413,12 @@ generated quantities {
       }
     }
 
-    // Now calculate log_lik and set omega_out
+    // Now calculate log_lik, omega_out, and simulate predicted pumps
     for (k in 1:ntrial) {
       real beta_i;
       real omega_k;
-
+      
+      // beta depends on trial phase (pre/post reversal) and color
       beta_i = (k > 90) ? (
         (balloon_color[i, k] == 1) ? b_beta_post[i] :
         (balloon_color[i, k] == 2) ? o_beta_post[i] :
@@ -428,16 +428,29 @@ generated quantities {
         (balloon_color[i, k] == 2) ? o_beta_pre[i] :
                                      y_beta[i]
       );
-
+      
+      // omega_k lookup
       omega_k = (balloon_color[i,k] == 1) ? omega_blue[k] :
                 (balloon_color[i,k] == 2) ? omega_orange[k] :
-                                           omega_yellow[k];
-
+                                             omega_yellow[k];
+      
       omega_out[i,k] = omega_k;
-
+      
       int opp = opportunity[i,k];
       
-      // Safety check to avoid array indexing issues
+      // ---- simulate predicted number of pumps (core change) ----
+      int pred_pumps = 0;
+      for (n in 1:opp) {
+        real p_continue = inv_logit(-beta_i * (n - omega_k));
+        if (bernoulli_rng(p_continue) == 1) {
+          pred_pumps += 1;
+        } else {
+          break;
+        }
+      }
+      npumps_saved[i,k] = pred_pumps;   // save predicted, not observed
+      
+      // ---- log-likelihood (unchanged) ----
       if (opp > 0 && dims(d)[3] >= opp) {
         row_vector[opp] n_idx = linspaced_row_vector(opp, 1, opp);
         log_lik[i,k] = bernoulli_logit_lpmf(
