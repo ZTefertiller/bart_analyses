@@ -1,6 +1,6 @@
 functions {
-  real partial_log_lik(array[] int subj_idx,
-                       int start, int end,
+  real partial_log_lik(array[] int slice_subj_idx,   // <-- rename to show it's a slice
+                       int start, int end,           // (required args, but you won’t use them)
                        array[] int Tsubj,
                        array[,] int npumps,
                        array[,] int outcome,
@@ -10,9 +10,12 @@ functions {
                        vector gam,
                        vector tau) {
     real ll = 0;
-
-    for (s in start:end) {
-      int j = subj_idx[s];
+    
+    //------------------------------------------------------------------
+    // iterate over *slice_subj_idx* itself, not start:end
+    //------------------------------------------------------------------
+    for (i in 1:size(slice_subj_idx)) {
+      int j = slice_subj_idx[i];
       int n_succ = 0;
       int n_pump = 0;
 
@@ -147,6 +150,10 @@ generated quantities {
   // Trial-level log-likelihoods for LOO/WAIC
   array[nsub, ntrial] real log_lik;
 
+  // -------- trial-level model predictions (new) --------
+  array[nsub, ntrial] int npumps_pred;   // number of pumps the model would make
+  // -----------------------------------------------------
+
   for (j in 1:nsub) {
     int n_succ = 0;
     int n_pump = 0;
@@ -162,39 +169,49 @@ generated quantities {
       } else {
         belief_component = (phi[j] + eta[j] * n_succ) / (1 + eta[j] * n_pump);
       }
-      
-      // Ensure belief_component is in valid range [0.001, 0.999]
       belief_component = fmin(0.999, fmax(0.001, belief_component));
       p_burst = 1 - belief_component;
-      
-      // Ensure p_burst is in valid range [0.001, 0.999]
       p_burst = fmin(0.999, fmax(0.001, p_burst));
-      
-      // Safe computation of denom
-      real denom = log1m(p_burst);
-      denom = fmin(-0.001, denom);  // Stricter bound to avoid division issues
-      
-      // Calculate omega with bounds check
-      omega = -gam[j] / denom;
-      omega = fmin(1000, fmax(-1000, omega));  // Prevent extreme values
-      
-      // Reset trial log-likelihood
-      log_lik[j, k] = 0;
 
-      // Add up log-likelihoods for each pump before cashout/explosion
+      real denom = log1m(p_burst);
+      denom = fmin(-0.001, denom);           // avoid division issues
+      omega  = -gam[j] / denom;
+      omega  = fmin(1000, fmax(-1000, omega));
+
+      // ---------- log-likelihood (unchanged) ------------
+      log_lik[j, k] = 0;
       for (l in 1:(npumps[j, k] + 1 - outcome[j, k])) {
         real raw_pred = tau[j] * (omega - l);
         real bounded_pred = fmin(100, fmax(-100, raw_pred));
         log_lik[j, k] += bernoulli_logit_lpmf(d[j, k, l] | bounded_pred);
       }
+      // --------------------------------------------------
 
-      // Update counters
+      // ---------- simulate model-predicted pumps --------
+      {
+        int pred = 0;
+        for (l in 1:maxpump) {                       // pump until stop or maxpump
+          real raw_pred = tau[j] * (omega - l);
+          real bounded_pred = fmin(100, fmax(-100, raw_pred));
+          if (bernoulli_rng(inv_logit(bounded_pred)) == 1) {
+            pred += 1;
+          } else {
+            break;
+          }
+        }
+        npumps_pred[j, k] = pred;                    // save prediction
+      }
+      // --------------------------------------------------
+
+      // Update counters for next trial
       n_succ += npumps[j, k] - outcome[j, k];
       n_pump += npumps[j, k];
     }
 
-    // Fill unused trials with 0 log-likelihoods
-    for (k in (Tsubj[j] + 1):ntrial)
-      log_lik[j, k] = 0;
+    // Fill unused trials with zeros
+    for (k in (Tsubj[j] + 1):ntrial) {
+      log_lik[j, k]   = 0;
+      npumps_pred[j, k] = 0;                         // no prediction for non-existent trial
+    }
   }
 }
