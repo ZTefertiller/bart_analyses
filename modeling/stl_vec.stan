@@ -106,6 +106,7 @@ model {
 generated quantities {
   array[nsub, ntrial] real omega_out;
   array[nsub, ntrial] real log_lik;
+  array[nsub, ntrial] int npumps_pred;  // <-- added prediction array
 
   for (i in 1:nsub) {
     vector[ntrial] omega;
@@ -131,6 +132,18 @@ generated quantities {
     for (k in 1:ntrial) {
       omega_out[i, k] = omega[k];
       int opp = opportunity[i, k];
+
+      // simulate predicted number of pumps
+      int pred_pumps = 0;
+      for (n in 1:opp) {
+        real p_continue = inv_logit(-beta[i] * (n - omega[k]));
+        if (bernoulli_rng(p_continue) == 1) {
+          pred_pumps += 1;
+        } else {
+          break;
+        }
+      }
+      npumps_pred[i, k] = pred_pumps;
 
       if (opp > 0 && dims(d)[3] >= opp) {
         row_vector[opp] n_idx = linspaced_row_vector(opp, 1, opp);
