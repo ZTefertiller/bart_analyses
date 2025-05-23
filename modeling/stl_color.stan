@@ -324,7 +324,7 @@ model {
 generated quantities {
   array[nsub, ntrial] real omega_out;
   array[nsub, ntrial] real log_lik;
-  array[nsub, ntrial] int npumps_saved;  // now holds model-predicted pumps
+  array[nsub, ntrial] int npumps_pred;  // now holds model-predicted pumps
   
   for (i in 1:nsub) {
     // We need to calculate the omega values again here
@@ -342,7 +342,7 @@ generated quantities {
       omega_orange[k] = 0.0;
       omega_yellow[k] = 0.0;
       log_lik[i,k]    = 0.0;
-      npumps_saved[i,k] = 0;            // initialize prediction to zero
+      npumps_pred[i,k] = 0;            // initialize prediction to zero
     }
     
     // First calculate all omega values (unchanged)
@@ -448,7 +448,7 @@ generated quantities {
           break;
         }
       }
-      npumps_saved[i,k] = pred_pumps;   // save predicted, not observed
+      npumps_pred[i,k] = pred_pumps;   // save predicted, not observed
       
       // ---- log-likelihood (unchanged) ----
       if (opp > 0 && dims(d)[3] >= opp) {
