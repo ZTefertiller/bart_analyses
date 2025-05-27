@@ -186,8 +186,8 @@ cmd_stan_fit <- function(data, fit_name = "default", model_path) {
     
     fit <- mod$sample(
       data = data,
-      iter_warmup = 5,
-      iter_sampling = 5,
+      iter_warmup = 2000,
+      iter_sampling = 6000,
       chains = 4,
       parallel_chains = 4,
       threads_per_chain = 7,
@@ -210,7 +210,7 @@ freemax <- cmd_stan_fit(stan_data, "freemax","/home/BRAIN/ztefertiller/ztefertil
 file.copy(freemax$output_files(),
           to = "/data_tina/pro_bart_KnolleLab/stan_data/freemax",
           overwrite=TRUE)
-          
+
 stl <- cmd_stan_fit(stan_data, "stl","/home/BRAIN/ztefertiller/ztefertiller/bart_analyses/modeling/stl_vec.stan")
 file.copy(stl$output_files(),
           to = "/data_tina/pro_bart_KnolleLab/stan_data/stl",
@@ -225,17 +225,18 @@ fourpar <- cmd_stan_fit(stan_data, "fourpar","/home/BRAIN/ztefertiller/ztefertil
 file.copy(fourpar$output_files(),
           to = "/data_tina/pro_bart_KnolleLab/stan_data/fourpar",
           overwrite=TRUE)
-          
 
 
 ```
 
 ```{r}
-ewmv <- cmd_stan_fit(stan_data, "ewmv")
+ewmv <- cmd_stan_fit(stan_data, "ewmv", "/home/BRAIN/ztefertiller/ztefertiller/bart_analyses/modeling/ewmv_vec.stan")
 ```
 
 ```{r}
 library(posterior)
+
+ex_draws <- function(fit){
 variables <- fit$draws() %>% variables()
 
 group_params <- grep("mu", variables, value=TRUE)
@@ -243,7 +244,23 @@ group_params <- grep("mu", variables, value=TRUE)
 group_draws <- fit$draws(variables = group_params)
 
 summary <- fit$summary()
+
+print(paste0("Model variables: ", group_params))
 print(summary)
+
+list(
+  group_params <- group_params,
+  draws <- group_draws,
+  summary <- summary
+)
+}
+
+#fourpar_sum <- ex_draws(fourpar)
+#freemax_sum <- ex_draws(freemax)
+#stl_sum <- ex_draws(stl)
+#stl_color_sum <- ex_draws(stl_color)
+ewmv_sum <- ex_draws(ewmv)
+
 ```
 
 
@@ -316,15 +333,16 @@ csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
 print(csv_files)
 stl_color <- as_cmdstan_fit(csv_files)
 
-folder_path <- "/data_tina/pro_bart_KnolleLab/stan_data/stl_freemax_overparam"
-csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
-print(csv_files)
-stl_freemax_color <- as_cmdstan_fit(csv_files)
+# folder_path <- "/data_tina/pro_bart_KnolleLab/stan_data/stl_freemax_overparam"
+# csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
+# print(csv_files)
+# stl_freemax_color <- as_cmdstan_fit(csv_files)
 
-folder_path <- "/data_tina/pro_bart_KnolleLab/stan_data/stl_freemax"
+folder_path <- "/data_tina/pro_bart_KnolleLab/stan_data/freemax/"
 csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
 print(csv_files)
 freemax <- as_cmdstan_fit(csv_files)
+
 ```
 
 
@@ -355,17 +373,24 @@ log_lik_4par <- posterior::as_draws_array(log_lik_4par)
 loo_4par <- loo(log_lik_4par)
 print(loo_4par)
 
+log_lik_freemax <- freemax$draws("log_lik", format= "matrix")
+log_lik_freemax <- posterior::as_draws_array(log_lik_freemax)
+
+loo_freemax <- loo(log_lik_freemax)
+print(loo_freemax)
+
 
 loo_comparison <- loo_compare(
               loo_4par,
               loo_ewmv, 
               loo_stl,
-              loo_stl_color
+              loo_stl_color,
+              loo_freemax
               )
 
 loo_df <- as.data.frame(loo_comparison)
 loo_df$elpd_diff <- as.numeric(loo_df$elpd_diff)
-loo_df$elpd_diff <- -df$elpd_diff
+#loo_df$elpd_diff <- -df$elpd_diff
 
 ggplot(df, aes(x= reorder(model,elpd_diff), y=elpd_diff)) +
   geom_bar(stat= "identity", fill="steelblue") +
