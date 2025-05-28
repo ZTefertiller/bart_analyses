@@ -93,6 +93,12 @@ questionnaires <- df_questionnaires %>%
 
 sub_ids <- unique(df$participant_id)
 
+for (col in gsub("\\.x$", "", grep("\\.x$", names(df), value = TRUE))) {
+  df[[col]] <- coalesce(df[[paste0(col, ".x")]], df[[paste0(col, ".y")]])
+}
+df <- df %>%
+  select(-ends_with(".x"), -ends_with(".y"))
+
 
 ```
 
@@ -180,7 +186,7 @@ stan_data <- create_stan_params(df)
 
 ```{r cmdstan equivalent because of compiler issue or ARM}
 cmd_stan_fit <- function(data, fit_name = "default") {
-  model_path <- "ewmv_vec.stan"
+  model_path <- "4par.stan"
   #output_path <- paste0("/media/ztefertiller/MRS_rsfMRI/zach_mcmc", fit_name, ".rds")
   output_path <- paste0("~/desktop", fit_name, ".rds")
 
@@ -189,8 +195,8 @@ cmd_stan_fit <- function(data, fit_name = "default") {
     
     fit <- mod$sample(
       data = data,
-      iter_warmup = 100,
-      iter_sampling = 100,
+      iter_warmup = 50,
+      iter_sampling = 50,
       chains = 4,
       parallel_chains = 4,
       threads_per_chain = 7,
@@ -207,7 +213,7 @@ cmd_stan_fit <- function(data, fit_name = "default") {
 }
 
 
-ewmv <- cmd_stan_fit(stan_data, "ewmv")
+stl_freemax <- cmd_stan_fit(stan_data, "stl_freemax")
 
 
 # file.copy(ewmv$output_files(),
@@ -303,6 +309,11 @@ folder_path <- "/media/ztefertiller/Transcend/mcmc/stl_color"
 csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
 print(csv_files)
 stl_color <- as_cmdstan_fit(csv_files)
+
+folder_path <- "/Volumes/Transcend/mcmc/freemax"
+csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
+print(csv_files)
+freenmax <- as_cmdstan_fit(csv_files)
 ```
 
 
@@ -357,5 +368,5 @@ ggplot(df, aes(x= reorder(model,elpd_diff), y=elpd_diff)) +
   ) +
   theme_minimal()
 
-
+#subj level rhat avg
 ```

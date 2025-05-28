@@ -92,6 +92,12 @@ questionnaires <- df_questionnaires %>%
 sub_ids <- unique(df$participant_id)
 
 
+for (col in gsub("\\.x$", "", grep("\\.x$", names(df), value = TRUE))) {
+  df[[col]] <- coalesce(df[[paste0(col, ".x")]], df[[paste0(col, ".y")]])
+}
+df <- df %>%
+  select(-ends_with(".x"), -ends_with(".y"))
+
 ```
 
 ```{r load function: stan input data}
@@ -404,4 +410,88 @@ ggplot(df, aes(x= reorder(model,elpd_diff), y=elpd_diff)) +
   theme_minimal()
 
 
+```
+
+
+
+```{r}
+# investigating high rhat individuals 
+
+# Get summary with Rhat values for all parameters
+summary_stats <- fit$summary()
+
+# Filter for individual-level parameters with high Rhat
+# Assuming your individual parameters follow patterns like "param[i]" where i is participant
+high_rhat_params <- summary_stats %>%
+  filter(rhat > 1.01) %>%
+  # Extract participant numbers from parameter names (adjust pattern as needed)
+  mutate(
+    participant_num = str_extract(variable, "\\[(\\d+)\\]"),
+    participant_num = as.numeric(str_extract(participant_num, "\\d+"))
+  ) %>%
+  filter(!is.na(participant_num))
+
+# Get unique participants with convergence issues
+problematic_participants <- unique(high_rhat_params$participant_num)
+
+print(paste("Participants with Rhat > 1.01:", paste(problematic_participants, collapse = ", ")))
+
+# Map back to original participant IDs
+problematic_ids <- stan_data$sub_ids[problematic_participants]
+print(paste("Original participant IDs:", paste(problematic_ids, collapse = ", ")))
+
+# Look at data patterns for problematic participants
+problematic_data <- df %>%
+  filter(participant_id %in% problematic_ids) %>%
+  group_by(participant_id) %>%
+  summarise(
+    n_trials = n(),
+    mean_pumps = mean(inflations, na.rm = TRUE),
+    sd_pumps = sd(inflations, na.rm = TRUE),
+    pop_rate = mean(popped, na.rm = TRUE),
+    min_pumps = min(inflations, na.rm = TRUE),
+    max_pumps = max(inflations, na.rm = TRUE),
+    # Check for extreme patterns
+    all_same = length(unique(inflations)) == 1,
+    mostly_zero = mean(inflations == 0) > 0.8,
+    mostly_max = mean(inflations >= quantile(inflations, 0.9, na.rm = TRUE)) > 0.8
+  )
+
+print(problematic_data)
+
+# Trace plots for problematic participants
+library(bayesplot)
+
+# Get parameter names for problematic participants (adjust pattern to your model)
+problem_params <- paste0("your_param_name[", problematic_participants, "]")
+
+# Trace plots
+mcmc_trace(fit$draws(variables = problem_params))
+
+# Rank plots (better for diagnosing convergence)
+mcmc_rank_overlay(fit$draws(variables = problem_params))
+
+
+# Find participants with good Rhat values for comparison
+good_participants <- summary_stats %>%
+  filter(str_detect(variable, "\\[\\d+\\]")) %>%
+  mutate(participant_num = as.numeric(str_extract(variable, "\\d+"))) %>%
+  filter(!is.na(participant_num)) %>%
+  group_by(participant_num) %>%
+  summarise(max_rhat = max(rhat, na.rm = TRUE)) %>%
+  filter(max_rhat <= 1.01) %>%
+  pull(participant_num)
+
+# Compare data characteristics
+comparison_data <- df %>%
+  filter(participant_id %in% stan_data$sub_ids[good_participants[1:5]]) %>%  # first 5 good ones
+  group_by(participant_id) %>%
+  summarise(
+    mean_pumps = mean(inflations, na.rm = TRUE),
+    sd_pumps = sd(inflations, na.rm = TRUE),
+    pop_rate = mean(popped, na.rm = TRUE)
+  )
+
+print("Problematic vs Good participants:")
+print(list(problematic = problematic_data, good = comparison_data))
 ```
