@@ -1,0 +1,155 @@
+---
+title: "statistic_plotting"
+author: "Zach Tefertiller"
+date: "2025-06-12"
+output: html_document
+---
+
+```{r}
+plot_avg_adjusted_inflation <- function(data,
+                                        balloon_col = "trial_number",
+                                        color_col = "balloon_color",
+                                        inflation_col = "inflations",
+                                        popped_col = "popped",
+                                        participant_col = "participant_id",
+                                        save_path = "avg_adjusted_inflation_plot.png") {
+  library(dplyr)
+  library(ggplot2)
+  
+  # Filter to blue and orange, and only unpopped trials
+  filtered <- data %>%
+    filter(!!sym(color_col) %in% c("b", "o"),
+           !!sym(popped_col) == 0)
+  
+  # Compute summary: mean, SEM, and N per trial/color
+  summary <- filtered %>%
+    group_by(trial = !!sym(balloon_col), color = !!sym(color_col)) %>%
+    summarise(
+      mean_inflation = mean(!!sym(inflation_col), na.rm = TRUE),
+      sd_inflation = sd(!!sym(inflation_col), na.rm = TRUE),
+      n = n(),
+      sem = sd_inflation / sqrt(n),
+      .groups = "drop"
+    )
+  
+  # Print participant counts per color per trial
+  message("Participants per trial (unpopped only):")
+  print(summary %>% select(trial, color, n) %>% arrange(trial, color))
+  
+  # Plot
+  p <- ggplot(summary, aes(x = trial, y = mean_inflation, color = color, group = color)) +
+    # Background shading
+    annotate("rect", xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = 8,
+             fill = "grey90", alpha = 0.5) +
+    annotate("rect", xmin = -Inf, xmax = Inf, ymin = 8, ymax = Inf,
+             fill = "grey80", alpha = 0.5) +
+    
+    # Error bars
+    geom_errorbar(aes(ymin = mean_inflation - sem, ymax = mean_inflation + sem),
+                  width = 0.3, size = 0.5, alpha = 0.8) +
+    
+    # Lines (disconnected by color & trial — avoids jumps)
+    geom_line(data = summary, aes(group = color), size = 0.8, na.rm = TRUE) +
+    
+    # Threshold lines
+    geom_vline(xintercept = 91, linetype = "dashed", color = "black") +
+    geom_hline(yintercept = 8, linetype = "dashed", color = "black") +
+    
+    # Colors
+    scale_color_manual(values = c("b" = "blue", "o" = "orange")) +
+    
+    # Labels
+    annotate("text", x = Inf, y = 7.5, label = "Low Value", hjust = 1.1, vjust = 1.2, size = 3.5) +
+    annotate("text", x = Inf, y = 8.5, label = "High Value", hjust = 1.1, vjust = -0.2, size = 3.5) +
+    
+    labs(
+      title = "Average Adjusted Inflations",
+      x = "Trial",
+      y = "Inflations"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "none")
+  
+  # Print
+  print(p)
+  
+  # Save with white background
+  ggsave(save_path, plot = p, width = 10, height = 6, dpi = 600, bg = "white")
+}
+
+plot_avg_adjusted_inflation(df)
+```
+
+
+```{r}
+library(tidyverse)
+library(Hmisc)
+library(reshape2)
+
+# Variables
+vars_to_include <- c(
+  "average_inflation_rt", "total_score", "total_pops", "total_inactive", "task_time",
+  "spq_total_score", "ipip_total_score", "adjusted_inflations",
+  "spq_total", "ipip_total", "pdi_total", "pdi_distress", "pdi_frequency",
+  "pdi_conviction", "caps_total", "caps_distress", "caps_intrusiveness", "caps_frequency", "phq_total",
+  "ppgm_total", "mdq_total"
+)
+
+# Clean and correlate
+df_corr <- df %>%
+  select(any_of(vars_to_include)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  drop_na()
+
+corr_res <- rcorr(as.matrix(df_corr))
+r <- corr_res$r
+p <- corr_res$P
+
+# Melt matrices
+r_melt <- melt(r)
+p_melt <- melt(p)
+colnames(r_melt) <- c("Var1", "Var2", "r")
+colnames(p_melt) <- c("Var1", "Var2", "p")
+
+# Get upper triangle only
+heatmap_df <- left_join(r_melt, p_melt, by = c("Var1", "Var2")) %>%
+  filter(as.integer(factor(Var1, levels = vars_to_include)) <
+         as.integer(factor(Var2, levels = vars_to_include))) %>%
+  mutate(
+    sig = case_when(
+      p < 0.001 ~ "***",
+      p < 0.01 ~ "**",
+      p < 0.05 ~ "*",
+      TRUE ~ ""
+    ),
+    label = ifelse(p < 0.05, paste0(sprintf("%.2f", r), "\n", sig), "")
+  )
+
+# Set factor levels
+heatmap_df$Var1 <- factor(heatmap_df$Var1, levels = vars_to_include)
+heatmap_df$Var2 <- factor(heatmap_df$Var2, levels = vars_to_include)
+
+# Plot
+p <- ggplot(heatmap_df, aes(x = Var2, y = Var1, fill = r)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = label), size = 3.5, na.rm = TRUE) +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0,
+                       limits = c(-1, 1), name = "r", na.value = "grey90") +
+  theme_minimal(base_size = 12) +
+  labs(
+    title = "Correlation Map",
+    x = NULL, y = NULL
+  ) +
+  theme(
+    axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 10),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+# Show
+print(p)
+
+# Save clean plot
+ggsave("correlation_map_upper_triangle.png", p, width = 9, height = 8, dpi = 600, bg = "white")
+
+```
