@@ -81,6 +81,7 @@ if(nrow(duplicate_trials) > 0){
   cat("No duplicate trials found.\n")
 }
 
+
 df_clean_unique <- df_clean %>%
   distinct(participant_id, trial_number, .keep_all = TRUE)
 
@@ -89,6 +90,34 @@ df_clean_unique <- df_clean %>%
   group_by(participant_id, trial_number) %>%
   slice(1) %>%  # Keeps the first occurrence in each group
   ungroup()
+
+
+
+
+
+
+# attention check exclusion -- when programming questionnaires I should have
+# been a lot more careful and kept the naming / boolean conventions the same
+# i hope this does not make you go insane
+
+# ac rejection criteria:
+# if value > 1 caps_attention_fails, pdi_attention_fails, phq_attention_fails, spq_attention_fails
+# if FALSE ipip_attention_passed
+# if "attention" not in mdq_q1 if mdq_1 is taken as a string or list of strings 
+
+ac_exclusion <- TRUE
+
+if(ac_exclusion == TRUE) {
+  cat("Pre-exclusion number of participants:\n")
+  print(length(unique(df_clean_unique$participant_id)))
+  df_clean_unique <- df_clean_unique %>%
+    group_by(participant_id) %>%
+    filter(!(caps_attention_fails > 0 | spq_attention_fails > 0 | pdi_attention_fails > 0 | 
+               phq_attention_fails > 0 | ipip_attention_passed == FALSE | !str_detect(mdq_q1, regex("attention", ignore_case = TRUE))))
+  cat("Post-exclusion number of participants:\n")
+  print(length(unique(df_clean_unique$participant_id)))
+}  
+
 
 
 

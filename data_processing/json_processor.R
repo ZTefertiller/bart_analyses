@@ -286,12 +286,15 @@ df_clean <- df_final %>%
     # Questionnaire totals
     spq_total_score, pdi_total, pdi_distress, pdi_frequency, pdi_conviction,
     caps_total, caps_distress, caps_intrusiveness, caps_frequency,
-    phq_total, ipip_total_score, ppgm_total, mdq_total,
+    phq_total, ipip_total_score, ppgm_total, mdq_total, mdq_q1,
     # Individual questionnaire questions (numeric 1/0)
     starts_with("spq_q"), starts_with("pdi_q"), starts_with("caps_q"),
     # Demographics and other variables
     antipsychotics, family_bipolar, family_schizophrenia,
-    drink_frequency, cigarettes_count, glasses_per_day
+    drink_frequency, cigarettes_count, glasses_per_day,
+    # attention checks
+    caps_attention_fails, pdi_attention_fails, spq_attention_fails,
+    phq_attention_fails, ipip_attention_passed
   ) %>%
   # Sort df_clean by participant_id, then by trial_number
   arrange(participant_id, trial_number)
