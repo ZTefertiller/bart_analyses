@@ -6,76 +6,64 @@ output: html_document
 ---
 
 ```{r}
+library(dplyr)
+library(ggplot2)
+
 plot_avg_adjusted_inflation <- function(data,
-                                        balloon_col = "trial_number",
-                                        color_col = "balloon_color",
+                                        balloon_col   = "trial_number",
+                                        color_col     = "balloon_color",
                                         inflation_col = "inflations",
-                                        popped_col = "popped",
+                                        popped_col    = "popped",
                                         participant_col = "participant_id",
-                                        save_path = "avg_adjusted_inflation_plot.png") {
-  library(dplyr)
-  library(ggplot2)
-  
-  # Filter to blue and orange, and only unpopped trials
-  filtered <- data %>%
-    filter(!!sym(color_col) %in% c("b", "o"),
-           !!sym(popped_col) == 0)
-  
-  # Compute summary: mean, SEM, and N per trial/color
-  summary <- filtered %>%
-    group_by(trial = !!sym(balloon_col), color = !!sym(color_col)) %>%
-    summarise(
-      mean_inflation = mean(!!sym(inflation_col), na.rm = TRUE),
-      sd_inflation = sd(!!sym(inflation_col), na.rm = TRUE),
-      n = n(),
-      sem = sd_inflation / sqrt(n),
-      .groups = "drop"
-    )
-  
-  # Print participant counts per color per trial
-  message("Participants per trial (unpopped only):")
-  print(summary %>% select(trial, color, n) %>% arrange(trial, color))
-  
-  # Plot
+                                        save_path = "avg_adjusted_inflation_plot.png",
+                                        max_trials = 60) {
+
+  # blue and orange only, overlaid all trials on same x axis 
+  dat <- data %>%
+    filter(.data[[color_col]] %in% c("b", "o")) %>%
+    arrange(.data[[participant_col]], .data[[balloon_col]]) %>%
+    group_by(.data[[participant_col]], .data[[color_col]]) %>%
+    mutate(color_order = row_number()) %>%
+    ungroup()
+
+  # adjusted inflations only
+  dat_unpopped <- dat %>%
+    filter(.data[[popped_col]] == 0,
+           color_order <= max_trials)
+
+  # average and standard error of mean
+  summary <- dat_unpopped %>%
+    group_by(color = .data[[color_col]],
+             trial = color_order) %>%
+    summarise(mean_inflation = mean(.data[[inflation_col]], na.rm = TRUE),
+              sd_inflation   = sd  (.data[[inflation_col]], na.rm = TRUE),
+              n              = n(),
+              sem            = sd_inflation / sqrt(n),
+              .groups = "drop")
+
   p <- ggplot(summary, aes(x = trial, y = mean_inflation, color = color, group = color)) +
-    # Background shading
-    annotate("rect", xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = 8,
-             fill = "grey90", alpha = 0.5) +
-    annotate("rect", xmin = -Inf, xmax = Inf, ymin = 8, ymax = Inf,
-             fill = "grey80", alpha = 0.5) +
-    
-    # Error bars
+    # reversal and max punishment balloon lines
+    geom_vline(xintercept = 30.5, color = "black", size = 0.5) +
+    geom_hline(yintercept = 8, linetype = "dotted", color = "black", size = 0.5) +
+
+    # error bars
     geom_errorbar(aes(ymin = mean_inflation - sem, ymax = mean_inflation + sem),
-                  width = 0.3, size = 0.5, alpha = 0.8) +
-    
-    # Lines (disconnected by color & trial — avoids jumps)
-    geom_line(data = summary, aes(group = color), size = 0.8, na.rm = TRUE) +
-    
-    # Threshold lines
-    geom_vline(xintercept = 91, linetype = "dashed", color = "black") +
-    geom_hline(yintercept = 8, linetype = "dashed", color = "black") +
-    
-    # Colors
-    scale_color_manual(values = c("b" = "blue", "o" = "orange")) +
-    
-    # Labels
-    annotate("text", x = Inf, y = 7.5, label = "Low Value", hjust = 1.1, vjust = 1.2, size = 3.5) +
-    annotate("text", x = Inf, y = 8.5, label = "High Value", hjust = 1.1, vjust = -0.2, size = 3.5) +
-    
-    labs(
-      title = "Average Adjusted Inflations",
-      x = "Trial",
-      y = "Inflations"
-    ) +
-    theme_minimal() +
+                  width = 0.25, alpha = 0.7) +
+    geom_line(size = 0.9, na.rm = TRUE) +
+
+    scale_color_manual(values = c(b = "blue", o = "orange")) +
+    scale_x_continuous(breaks = seq(0, max_trials, 10),
+                       limits = c(1, max_trials)) +
+    labs(title = "Average Adjusted Inflations",
+         x = "Trial",
+         y = "Inflations") +
+    theme_minimal(base_size = 11) +
     theme(legend.position = "none")
-  
-  # Print
+
   print(p)
-  
-  # Save with white background
-  ggsave(save_path, plot = p, width = 10, height = 6, dpi = 600, bg = "white")
+  ggsave(save_path, p, width = 10, height = 6, dpi = 600, bg = "white")
 }
+
 
 plot_avg_adjusted_inflation(df)
 ```
