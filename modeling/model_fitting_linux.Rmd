@@ -495,3 +495,42 @@ comparison_data <- df %>%
 print("Problematic vs Good participants:")
 print(list(problematic = problematic_data, good = comparison_data))
 ```
+
+
+```{r}
+# Map to original participant IDs and examine their data
+if(length(problematic_participants) > 0) {
+  problematic_ids <- stan_data$sub_ids[problematic_participants]
+  
+  # Look at win/loss patterns that might cause learning rate issues
+  behavioral_analysis <- df %>%
+    filter(participant_id %in% problematic_ids) %>%
+    mutate(
+      win = ifelse(popped == 0, 1, 0),  # didn't pop = win
+      loss = ifelse(popped == 1, 1, 0)  # popped = loss
+    ) %>%
+    group_by(participant_id) %>%
+    summarise(
+      n_trials = n(),
+      win_rate = mean(win, na.rm = TRUE),
+      loss_rate = mean(loss, na.rm = TRUE),
+      mean_pumps = mean(inflations, na.rm = TRUE),
+      sd_pumps = sd(inflations, na.rm = TRUE),
+      # Check for patterns that make learning rates hard to identify
+      consecutive_wins = max(rle(win)$lengths[rle(win)$values == 1], na.rm = TRUE),
+      consecutive_losses = max(rle(loss)$lengths[rle(loss)$values == 1], na.rm = TRUE),
+      # Variability in responses after wins vs losses
+      pumps_after_win = list(inflations[which(lag(win) == 1)]),
+      pumps_after_loss = list(inflations[which(lag(loss) == 1)])
+    ) %>%
+    rowwise() %>%
+    mutate(
+      var_after_win = ifelse(length(pumps_after_win) > 1, var(pumps_after_win), NA),
+      var_after_loss = ifelse(length(pumps_after_loss) > 1, var(pumps_after_loss), NA)
+    ) %>%
+    select(-pumps_after_win, -pumps_after_loss)
+  
+  print("Behavioral patterns for problematic participants:")
+  print(behavioral_analysis)
+}
+```
