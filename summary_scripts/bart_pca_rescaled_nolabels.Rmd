@@ -1,0 +1,398 @@
+
+---
+title: "PCA: Color by Questionnaire (Rescaled)"
+author: "Zach Tefertiller"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(factoextra)
+library(dplyr)
+library(tibble)
+library(ggplot2)
+
+# Define questionnaire item columns
+questionnaire_items <- c(
+  paste0("spq_q", 1:22),
+  paste0("pdi_q", 1:21),
+  paste0("caps_q", 1:32)
+)
+
+# Extract a single representative row per participant with valid questionnaire data
+df_questionnaire <- df_clean_unique %>%
+  select(participant_id, all_of(questionnaire_items)) %>%
+  group_by(participant_id) %>%
+  filter(any(!is.na(across(all_of(questionnaire_items))))) %>%
+  slice(1) %>%
+  ungroup()
+
+# Do not scale binary data; use prcomp scaling instead
+df_pca_input <- df_questionnaire %>%
+  column_to_rownames("participant_id") %>%
+  mutate(across(everything(), as.numeric)) %>%
+  filter(rowSums(is.na(.)) < 10)
+
+# Perform PCA
+pca_result <- prcomp(df_pca_input, center = TRUE, scale. = TRUE)
+```
+
+```{r pca-correlation-circle, fig.width=8, fig.height=8}
+# Extract explained variance
+explained_var <- summary(pca_result)$importance["Proportion of Variance", 1:2] * 100
+pc1_label <- paste0("PC1 (", round(explained_var[1], 1), "%)")
+pc2_label <- paste0("PC2 (", round(explained_var[2], 1), "%)")
+
+# Extract loadings
+loadings <- as.data.frame(pca_result$rotation[, 1:2])
+loadings$var <- rownames(loadings)
+loadings$scale <- case_when(
+  grepl("^spq_", loadings$var) ~ "SPQ",
+  grepl("^pdi_", loadings$var) ~ "PDI",
+  grepl("^caps_", loadings$var) ~ "CAPS",
+  TRUE ~ "Other"
+)
+
+# Normalize arrows to fill circle
+max_len <- max(sqrt(loadings$PC1^2 + loadings$PC2^2))
+loadings <- loadings %>%
+  mutate(PC1 = PC1 / max_len,
+         PC2 = PC2 / max_len)
+
+# Unit circle
+circle <- data.frame(
+  x = cos(seq(0, 2 * pi, length.out = 100)),
+  y = sin(seq(0, 2 * pi, length.out = 100))
+)
+
+# Final plot
+ggplot() +
+  geom_path(data = circle, aes(x = x, y = y), color = "gray80", linetype = "dashed") +
+  geom_segment(data = loadings,
+               aes(x = 0, y = 0, xend = PC1, yend = PC2, color = scale),
+               arrow = arrow(length = unit(0.15, "cm")), size = 0.8) +
+  scale_color_manual(values = c("SPQ" = "#1f78b4", "PDI" = "#33a02c", "CAPS" = "#e31a1c")) +
+  coord_fixed() +
+  labs(
+  title = "SPQ - PDI - CAPS",
+  x = pc1_label,
+  y = pc2_label,
+  color = NULL # <- this removes "scale" as the legend title
+) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black"),
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+
+ggsave(
+  filename = "~/Desktop/pca_questionnaire.png",
+  plot = last_plot(),  # or name your ggplot explicitly
+  width = 10,
+  height = 10,
+  dpi = 600,
+  bg = "white"
+)
+```
+
+
+```{r}
+library(tidyverse)
+
+# Extract PCA loadings for the first 5 PCs
+loadings_df <- as.data.frame(pca_result$rotation[, 1:5]) %>%
+  rownames_to_column("item")
+
+# Convert to long format, get absolute loadings, and select top 10 per PC
+top_loadings <- loadings_df %>%
+  pivot_longer(-item, names_to = "PC", values_to = "loading") %>%
+  mutate(abs_loading = abs(loading)) %>%
+  group_by(PC) %>%
+  arrange(desc(abs_loading)) %>%
+  slice(1:10) %>%
+  ungroup()
+
+# Display clearly
+print(top_loadings)
+
+# Optional: plot heatmap of top loadings
+library(pheatmap)
+
+# Prepare heatmap data
+heatmap_data <- top_loadings %>%
+  select(item, PC, loading) %>%
+  pivot_wider(names_from = PC, values_from = loading, values_fill = 0) %>%
+  column_to_rownames("item")
+
+pheatmap(heatmap_data,
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         main = "Top 10 Loadings per PC",
+         fontsize_row = 8)
+
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+
+# Extract PCA loadings for first 5 PCs
+loadings_df <- as.data.frame(pca_result$rotation[, 1:5]) %>%
+  rownames_to_column("item") %>%
+  pivot_longer(-item, names_to = "PC", values_to = "loading") %>%
+  mutate(
+    Questionnaire = case_when(
+      str_detect(item, "^spq_") ~ "SPQ",
+      str_detect(item, "^pdi_") ~ "PDI",
+      str_detect(item, "^caps_") ~ "CAPS",
+      TRUE ~ "Other"
+    ),
+    intensity = abs(loading)
+  )
+
+# Select top 10 loadings per PC
+top_loadings <- loadings_df %>%
+  group_by(PC) %>%
+  slice_max(order_by = intensity, n = 42) %>%
+  ungroup()
+
+# Plot with explicit loading values and questionnaire coloring
+ggplot(top_loadings, aes(x = PC, y = reorder(item, intensity), fill = Questionnaire, alpha = intensity)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = sprintf("%.2f", loading)), size = 3) +
+  scale_alpha_continuous(range = c(0.4, 1), guide = "none") +
+  scale_fill_brewer(palette = "Set1") +
+  labs(
+    title = "Top 10 PCA Loadings per Component",
+    x = "Principal Component",
+    y = "Item",
+    fill = "Questionnaire"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.y = element_text(size = 9),
+    axis.text.x = element_text(size = 11),
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    panel.grid = element_blank()
+  )
+
+ggsave("PCA_Loadings_by_Questionnaire.png", width = 10, height = 10, dpi = 600, bg = "white")
+
+
+```
+```{r}
+library(tidyverse)
+library(ggplot2)
+
+# Extract and reshape PCA loadings (top 5 PCs)
+loadings_df <- as.data.frame(pca_result$rotation[, 1:5]) %>%
+  rownames_to_column("item") %>%
+  pivot_longer(-item, names_to = "PC", values_to = "loading") %>%
+  mutate(
+    Questionnaire = case_when(
+      str_detect(item, "^spq_") ~ "SPQ",
+      str_detect(item, "^pdi_") ~ "PDI",
+      str_detect(item, "^caps_") ~ "CAPS",
+      TRUE ~ "Other"
+    ),
+    abs_loading = abs(loading)
+  )
+
+# Identify top 10 loadings per PC
+top_loadings_labels <- loadings_df %>%
+  group_by(PC) %>%
+  slice_max(order_by = abs_loading, n = 10) %>%
+  mutate(label = sprintf("%.2f", loading)) %>%
+  ungroup() %>%
+  select(item, PC, label)
+
+# Merge labels into main data
+plot_df <- loadings_df %>%
+  left_join(top_loadings_labels, by = c("item", "PC"))
+
+# Define custom colors explicitly
+custom_colors <- c("SPQ" = "#1f78b4", "PDI" = "#33a02c", "CAPS" = "#e31a1c", "Other" = "grey70")
+
+# Plot with clearly defined colors
+ggplot(plot_df, aes(x = PC, y = reorder(item, abs_loading), fill = Questionnaire, alpha = abs_loading)) +
+  geom_tile(color = "white", height = 0.9) +
+  geom_text(aes(label = label), size = 3, na.rm = TRUE) +
+  scale_alpha(range = c(0.3, 1), guide = "none") +
+  scale_fill_manual(values = custom_colors) +
+  labs(
+    title = "Top PCA Loadings per Component by Questionnaire",
+    x = "Principal Component",
+    y = "Items",
+    fill = "Questionnaire"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.y = element_text(size = 9),
+    axis.text.x = element_text(size = 11, angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    panel.grid = element_blank()
+  )
+
+ggsave("~/desktop/PCA_Loadings_Enhanced.png", width = 12, height = 14, dpi = 600, bg = "white")
+
+```
+
+
+```{r}
+
+# Explicitly define loadings first
+loadings <- as.data.frame(pca_result$rotation[, 1:2]) %>%
+  rownames_to_column(var = "item")
+
+# Now compute top loadings correctly
+top_loadings <- loadings %>%
+  mutate(abs_loading = sqrt(PC1^2 + PC2^2)) %>%
+  arrange(desc(abs_loading)) %>%
+  slice(1:10)
+
+print(top_loadings)
+
+library(pheatmap)
+
+loadings_matrix <- as.matrix(pca_result$rotation[, 1:5])  # First 5 PCs
+pheatmap(
+  loadings_matrix,
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  main = "Heatmap of PCA Loadings (PC1-PC5)",
+  color = colorRampPalette(c("navy", "white", "firebrick3"))(100)
+)
+pc_scores <- as.data.frame(pca_result$x[, 1:5])  # PC scores for first 5 PCs
+
+cor_matrix <- cor(pc_scores, clinical_data, use = "complete.obs")
+
+pheatmap(
+  cor_matrix,
+  display_numbers = TRUE,
+  main = "PCA-based Clinical Scores vs Other Parameters",
+  color = colorRampPalette(c("navy", "white", "firebrick3"))(100)
+)
+
+```
+
+
+```{r}
+# 1. Get PC1 scores per participant
+pc1_scores <- as.data.frame(pca_result$x[, 1, drop = FALSE])
+pc1_scores$participant_id <- rownames(pc1_scores)
+colnames(pc1_scores)[1] <- "PC1"
+
+# 2. Calculate total 'yes' count per participant
+total_yes <- df_questionnaire %>%
+  rowwise() %>%
+  mutate(yes_count = sum(c_across(-participant_id), na.rm = TRUE)) %>%
+  select(participant_id, yes_count)
+
+# 3. Merge PC1 and yes_count
+pc1_vs_yes <- left_join(pc1_scores, total_yes, by = "participant_id")
+
+# 4. Correlation test
+cor_result <- cor.test(pc1_vs_yes$PC1, pc1_vs_yes$yes_count)
+r_val <- round(cor_result$estimate, 2)
+p_val <- formatC(cor_result$p.value, format = "e", digits = 2)
+
+# 5. Plot and save
+library(ggplot2)
+
+p <- ggplot(pc1_vs_yes, aes(x = yes_count, y = PC1)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  annotate("text",
+         x = Inf, y = Inf,
+         hjust = 1.1, vjust = 1.3,  # shifts upward
+         label = paste0("r = ", r_val, "\np = ", p_val),
+         size = 5,
+         fontface = "bold") +
+  labs(
+    title = "Participant PC1 vs Yes Responses",
+    x = "Total Yes Responses",
+    y = "PC1 Score"
+  ) +
+  theme_minimal(base_size = 14)
+
+# Save to Desktop
+ggsave("~/Desktop/pca_yes.png", plot = p, width = 8, height = 8, dpi = 600, bg = "white")
+
+
+```
+
+
+
+```{r}
+
+# 1. Perform PCA with varimax rotation
+library(psych)
+rotation_result <- principal(df_pca_input, nfactors = 2, rotate = "varimax", scores = FALSE)
+
+# 2. Extract explained variance from rotated solution
+explained_var <- rotation_result$Vaccounted["Proportion Var", 1:2] * 100
+pc1_label <- paste0("RC1 (", round(explained_var[1], 1), "%)")
+pc2_label <- paste0("RC2 (", round(explained_var[2], 1), "%)")
+
+# 3. Get loadings
+loadings <- as.data.frame(rotation_result$loadings[, 1:2])
+loadings$var <- rownames(loadings)
+
+# 4. Tag questionnaire source
+loadings$scale <- case_when(
+  grepl("^spq_", loadings$var) ~ "SPQ",
+  grepl("^pdi_", loadings$var) ~ "PDI",
+  grepl("^caps_", loadings$var) ~ "CAPS",
+  TRUE ~ "Other"
+)
+
+# 5. Normalize to fill unit circle
+max_len <- max(sqrt(loadings$RC1^2 + loadings$RC2^2), na.rm = TRUE)
+loadings <- loadings %>%
+  mutate(RC1 = RC1 / max_len,
+         RC2 = RC2 / max_len)
+
+# 6. Unit circle
+circle <- data.frame(
+  x = cos(seq(0, 2 * pi, length.out = 100)),
+  y = sin(seq(0, 2 * pi, length.out = 100))
+)
+
+# 7. Plot rotated loadings
+library(ggplot2)
+
+ggplot() +
+  geom_path(data = circle, aes(x = x, y = y), color = "gray80", linetype = "dashed") +
+  geom_segment(data = loadings,
+               aes(x = 0, y = 0, xend = RC1, yend = RC2, color = scale),
+               arrow = arrow(length = unit(0.15, "cm")), size = 0.8) +
+  scale_color_manual(values = c("SPQ" = "#1f78b4", "PDI" = "#33a02c", "CAPS" = "#e31a1c")) +
+  coord_fixed() +
+  labs(
+    title = "SPQ - PDI - CAPS (Rotated)",
+    x = pc1_label,
+    y = pc2_label,
+    color = NULL  # removes legend title "scale"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black"),
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+
+# 8. Save high-definition PNG
+ggsave(
+  filename = "~/Desktop/pca_questionnaire.png",
+  plot = last_plot(),
+  width = 10,
+  height = 10,
+  dpi = 600,
+  bg = "white"
+)
+
+
+```
