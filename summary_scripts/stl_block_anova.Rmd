@@ -1,0 +1,238 @@
+---
+title: "summary_stats_new"
+author: "Zach Tefertiller"
+date: "2025-05-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r pressure, echo=FALSE}
+library(dplyr)
+
+df_means <- df %>%
+  group_by(participant_id, balloon_color) %>%
+  summarise(
+    mean_inflations = mean(inflations),
+    .groups = "drop"
+  )
+
+# 2. Run the repeated‐measures ANOVA
+#    Here we treat participant_id as the Error term for the within‐subjects factor
+anova_rm <- aov(
+  mean_inflations ~ balloon_color + 
+    Error(participant_id/balloon_color),
+  data = df_means
+)
+
+# 3. View the results
+summary(anova_rm)
+```
+
+
+```{r}
+library(dplyr)
+library(WRS2)
+
+# 1. Compute each participant’s 20%‐trimmed mean for each color
+df_trimmed <- df %>%
+  group_by(participant_id, balloon_color) %>%
+  summarise(
+    infl_trim = mean(inflations, trim = 0.2),
+    .groups = "drop"
+  )
+
+# 2. Omnibus trimmed‐mean repeated‐measures ANOVA
+omni <- rmanova(
+  y      = df_trimmed$infl_trim,
+  groups = df_trimmed$balloon_color,
+  blocks = df_trimmed$participant_id,
+  tr     = 0.2,
+  nboot  = 5000
+)
+str(omni)              # see what slots it has
+omni$p.value           # should give you the raw number
+format(omni$p.value, digits=4, scientific=TRUE)
+print(omni)
+
+
+# 3. Post-hoc pairwise trimmed‐mean contrasts (Holm-corrected)
+post <- rmmcp(
+  y      = df_trimmed$infl_trim,
+  groups = df_trimmed$balloon_color,
+  blocks = df_trimmed$participant_id,
+  tr     = 0.2,
+  alpha  = 0.05,
+  nboot  = 5000
+)
+str(post)
+post$p.value
+format(post$p.value, digits=4, scientific=TRUE)
+print(post)
+
+```
+
+
+```{r}
+library(WRS2)
+
+# Yuen’s robust one‐way ANOVA (20% trimming)
+t1way_result <- t1way(
+  formula = inflations ~ balloon_color,
+  data    = df,
+  tr      = 0.2      # 20% trim
+)
+print(t1way_result)
+
+# Bootstrap version (if you want bootstrap CIs/testing)
+t1waybt_result <- t1waybt(
+  formula = inflations ~ balloon_color,
+  data    = df,
+  tr      = 0.2,
+  nboot   = 1000
+)
+print(t1waybt_result)
+
+```
+
+
+```{r}
+library(dplyr)
+library(WRS2)
+
+# 1. Keep only trials 1–90
+df90 <- df %>% 
+  filter(trial_number <= 90)
+
+# 2. Compute each subject’s 20%‐trimmed mean per color
+df90_trim <- df90 %>%
+  group_by(participant_id, balloon_color) %>%
+  summarise(
+    infl_trim = mean(inflations, trim = 0.2),
+    .groups = "drop"
+  )
+
+# 3. Omnibus robust RM-ANOVA
+rmanova90 <- rmanova(
+  y      = df90_trim$infl_trim,
+  groups = df90_trim$balloon_color,
+  blocks = df90_trim$participant_id,
+  tr     = 0.2
+)
+print(rmanova90)
+
+# 4. Post-hoc pairwise contrasts (Holm correction)
+post90 <- rmmcp(
+  y      = df90_trim$infl_trim,
+  groups = df90_trim$balloon_color,
+  blocks = df90_trim$participant_id,
+  tr     = 0.2,
+  alpha  = 0.05
+)
+print(post90)
+
+```
+
+
+```{r stl by block and then anova}
+library(posterior)
+library(dplyr)
+library(tidyr)
+library(dplyr)
+library(tidyr)
+library(afex)            # aov_4()
+library(posterior)
+
+# ======================================================================
+# 1.  HIGH- vs LOW-SPQ SAMPLE  ----------------------------------------
+n_group <- 22
+spq_rank <- df_questionnaires |> arrange(desc(spq_z))
+
+high_ids <- spq_rank$participant_id[1:n_group]
+low_ids  <- spq_rank$participant_id[(nrow(spq_rank) - n_group + 1):nrow(spq_rank)]
+
+df_groups <- df |>
+  filter(participant_id %in% c(high_ids, low_ids)) |>
+  mutate(group = if_else(participant_id %in% high_ids, "HighSPQ", "LowSPQ"))
+
+# ======================================================================
+# 2.  BUILD THE TWO BLOCK DATASETS  -----------------------------------
+#    • BlueBlock  = first 30 blue balloons
+#    • OrangeBlock = last 30 orange balloons
+blue_block <- df_groups |>
+  filter(balloon_color == "b") |>
+  group_by(participant_id) |>
+  arrange(trial_number, .by_group = TRUE) |>
+  slice_head(n = 30) |>
+  ungroup()
+
+orange_block <- df_groups |>
+  filter(balloon_color == "o") |>
+  group_by(participant_id) |>
+  arrange(trial_number, .by_group = TRUE) |>
+  slice_tail(n = 30) |>
+  ungroup()
+
+# ======================================================================
+# 3.  FIT STAN ON EACH BLOCK  -----------------------------------------
+get_vwin_block <- function(data_block, block_label) {
+  fit <- cmd_stan_fit(create_stan_params(data_block),
+                      paste0(tolower(block_label), "_stanfit"))
+  
+  draws <- fit$draws(variables = "vwin", format = "draws_df") |>
+           summarise(across(everything(), mean)) |>
+           pivot_longer(everything(),
+                        names_to  = "param",
+                        values_to = "vwin") |>
+           mutate(sub_idx = as.integer(sub("\\D+", "", param))) |>
+           select(sub_idx, vwin)
+  
+  tibble(
+    participant_id = sort(unique(data_block$participant_id))[draws$sub_idx],
+    vwin           = draws$vwin,
+    block          = block_label
+  )
+}
+
+vwin_blue   <- get_vwin_block(blue_block,   "BlueBlock")
+vwin_orange <- get_vwin_block(orange_block, "OrangeBlock")
+vwin_tbl    <- bind_rows(vwin_blue, vwin_orange)
+
+
+
+# Extract mean vwin per participant from already-run Stan fits
+get_vwin_fixed <- function(fit, participant_ids, block_label) {
+  vwin_draws <- fit$draws("vwin", format = "draws_matrix")  # [iterations × subjects]
+  vwin_means <- colMeans(vwin_draws)
+
+  tibble(
+    participant_id = participant_ids,
+    vwin           = as.numeric(vwin_means),
+    block          = block_label
+  )
+}
+
+# Get the participant order actually passed into the Stan model
+ids_blue <- blue_block %>% distinct(participant_id) %>% arrange(participant_id) %>% pull()
+ids_orange <- orange_block %>% distinct(participant_id) %>% arrange(participant_id) %>% pull()
+
+# Extract vwin using correct mapping
+vwin_blue <- get_vwin_fixed(fit_blue, ids_blue, "BlueBlock")
+vwin_orange <- get_vwin_fixed(fit_orange, ids_orange, "OrangeBlock")
+
+# Merge them
+vwin_blocks <- bind_rows(vwin_blue, vwin_orange) %>%
+  left_join(df_groups %>% distinct(participant_id, group), by = "participant_id") %>%
+  mutate(across(c(group, block), as.factor))
+
+aov_vwin <- aov_4(
+  vwin ~ group * block + (block | participant_id),
+  data = vwin_blocks,
+  factorize = FALSE
+)
+
+print(aov_vwin)
+```
