@@ -1,5 +1,5 @@
 ---
-title: "post_prediction"
+title: "ewmv_vec_ppc"
 author: "Zach Tefertiller"
 date: "2025-04-09"
 output: html_document
@@ -26,6 +26,8 @@ library(readr)
 # Set output directory
 output_dir <- file.path(Sys.getenv("HOME"), "Desktop", "ewmv_ppc_trials")
 if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+fit <- ewmv
 
 # --- Extract Posterior Draws ---
 phi <- fit$draws("phi")

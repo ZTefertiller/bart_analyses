@@ -176,10 +176,7 @@ create_stan_params <- function(df, include_questionnaires = FALSE) {
   
   return(stan_data)
 }
-```
 
-
-```{r loading stan parameters}
 stan_data <- create_stan_params(df)
 ```
 
@@ -301,15 +298,14 @@ csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
 print(csv_files)
 stl <- as_cmdstan_fit(csv_files)
 
-folder_path <- paste0("/Volumes/Transcend/mcmc/stl_color/", date)
-csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
-print(csv_files)
-stl_color <- as_cmdstan_fit(csv_files)
+# folder_path <- paste0("/Volumes/Transcend/mcmc/stl_color/", date)
+# csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
+# print(csv_files)
+# stl_color <- as_cmdstan_fit(csv_files)
 
-folder_path <- paste0("/Volumes/Transcend/mcmc/freemax/", date)
-csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
-print(csv_files)
-freenmax <- as_cmdstan_fit(csv_files)
+# folder_path <- paste0("/Volumes/Transcend/mcmc/freemax/", date)
+# csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
+# print(csv_files)
 ```
 
 
