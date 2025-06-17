@@ -284,27 +284,29 @@ library(posterior)
 
 # assembling fit objects from csv data
 
-folder_path <- "/media/ztefertiller/Transcend/mcmc/fourpar"
+date <- "16_06_25"
+
+folder_path <- paste0("/Volumes/Transcend/mcmc/fourpar/", date)
 csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
 print(csv_files)
 fourpar <- as_cmdstan_fit(csv_files)
 
-folder_path <- "/Volumes/Transcend/mcmc/ewmv"
+folder_path <- paste0("/Volumes/Transcend/mcmc/ewmv/", date)
 csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
 print(csv_files)
 ewmv <- as_cmdstan_fit(csv_files)
 
-folder_path <- "/media/ztefertiller/Transcend/mcmc/stl"
+folder_path <- paste0("/Volumes/Transcend/mcmc/stl/", date)
 csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
 print(csv_files)
 stl <- as_cmdstan_fit(csv_files)
 
-folder_path <- "/Volumes/Transcend/mcmc/stl_color"
+folder_path <- paste0("/Volumes/Transcend/mcmc/stl_color/", date)
 csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
 print(csv_files)
 stl_color <- as_cmdstan_fit(csv_files)
 
-folder_path <- "/Volumes/Transcend/mcmc/freemax"
+folder_path <- paste0("/Volumes/Transcend/mcmc/freemax/", date)
 csv_files <- list.files(path = folder_path, pattern="\\.csv$", full.names =TRUE)
 print(csv_files)
 freenmax <- as_cmdstan_fit(csv_files)
