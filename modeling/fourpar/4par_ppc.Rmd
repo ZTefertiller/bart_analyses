@@ -22,7 +22,6 @@ if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
 
 # --- FITTED MODEL OBJECT ---
 fit <- fourpar  # replace with your fitted model object
-stan_data <- your_stan_data  # replace with your Stan data object
 
 # --- PREPARE DATA FOR PPC ---
 stan_data_ppc <- list(
