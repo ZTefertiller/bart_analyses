@@ -1,5 +1,5 @@
 # Read the CSV files
-df1 <- read.csv("/Users/zachtefertiller/Desktop/BART RL 180 Data/balloon_task_clean_data.csv", stringsAsFactors = FALSE)
+df1 <- read.csv("/Users/zachtefertiller/Desktop/bart_rl_180_data/balloon_task_clean_data.csv", stringsAsFactors = FALSE)
 df2 <- read.csv("/Users/zachtefertiller/Desktop/balloon_task_clean_data.csv", stringsAsFactors = FALSE)
 
 # Create a composite key for each data frame using trial_number and participant_id.
