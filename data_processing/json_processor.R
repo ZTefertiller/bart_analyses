@@ -8,7 +8,7 @@ library(tidyr)
 
 # read in jatos data, but not in typical json so convert to 
 # "ndjson" (newline separated instead of comma separated)
-raw_text <- read_file("/Users/zachtefertiller/Desktop/bart_only.json")
+raw_text <- read_file("/Users/zachtefertiller/Desktop/bart_rl_180_data/bart_only.json")
 ndjson_text <- str_replace_all(raw_text, "\\}\\{", "\\}\n\\{")
 write_file(ndjson_text, "/Users/zachtefertiller/Desktop/bart.ndjson")
 # read in line by line (each line is its own json)
@@ -74,15 +74,25 @@ write_csv(df_final, "/Users/zachtefertiller/Desktop/balloon_task_all_data.csv")
 glimpse(df_final)
 
 # Process questionnaire data
-json_file <- "/Users/zachtefertiller/Desktop/jatos_results_all.json"
+json_file <- "/Users/zachtefertiller/Desktop/bart_rl_180_data/jatos_results_all.json"
 lines <- readLines(json_file)
-filtered_lines <- lines[!grepl('"prolific_id"', lines) & !grepl('trial_number', lines)]
+filtered_lines <- lines[!grepl('"trial_number"', lines)]
 filtered_json_file <- "/Users/zachtefertiller/Desktop/jatos_results_filtered.json"
 writeLines(filtered_lines, filtered_json_file)
 raw_text <- read_file(filtered_json_file)
 ndjson_text <- str_replace_all(raw_text, "\\}\\{", "\\}\n\\{")
 write_file(ndjson_text, "/Users/zachtefertiller/Desktop/jatos_results_filtered.ndjson")
 df <- stream_in(file("/Users/zachtefertiller/Desktop/jatos_results_filtered.ndjson"))
+
+# Extract prolific_id mapping from jatos_results_all.json
+prolific_lookup <- df %>%
+  select(participant_id, prolific_id) %>%
+  filter(!is.na(prolific_id)) %>%
+  distinct(participant_id, .keep_all = TRUE)
+
+# Add prolific_id into df_final before merging age
+df_final <- left_join(df_final, prolific_lookup, by = "participant_id")
+
 
 # Extract SPQ data properly
 df_spq_only <- df %>%
@@ -232,12 +242,20 @@ df_wide <-
   )
 
 df_final <- left_join(df_final, df_wide, by = "participant_id")
-
+df_final <- left_join(df_final, prolific_lookup, by = "participant_id")
 # ─────────────────────────────────────────────────────────────────────────
 # Sort df_final by participant_id, then by trial_number
 # ─────────────────────────────────────────────────────────────────────────
 df_final <- df_final %>%
   arrange(participant_id, trial_number)
+
+# Adding age data from prolific demographic data
+age_data <- read_csv("/Users/zachtefertiller/Desktop/bart_rl_180_data/prolific_export_678633d0c16181fe626f7247.csv") %>%
+  select(prolific_id = `Participant id`, age = Age)
+
+# Merge age data with your existing dataframe
+df_final <- df_final %>%
+  left_join(age_data, by = "prolific_id")
 
 # Remove problematic columns and duplicates
 df_final <- subset(df_final, select = -c(
@@ -257,6 +275,7 @@ df_final$mdq_q1 <- gsub("^c\\(|\\)$", "", df_final$mdq_q1)
 df_final$mdq_q1 <- gsub("\"", "", df_final$mdq_q1)
 df_final$gambling_types <- gsub("^c\\(|\\)$", "", df_final$gambling_types)
 df_final$gambling_types <- gsub("\"", "", df_final$gambling_types)
+
 
 # Reorder columns: required fields first, then alphabetized
 all_columns <- colnames(df_final)
@@ -294,7 +313,9 @@ df_clean <- df_final %>%
     drink_frequency, cigarettes_count, glasses_per_day,
     # attention checks
     caps_attention_fails, pdi_attention_fails, spq_attention_fails,
-    phq_attention_fails, ipip_attention_passed
+    phq_attention_fails, ipip_attention_passed,
+    # other
+    age
   ) %>%
   # Sort df_clean by participant_id, then by trial_number
   arrange(participant_id, trial_number)
