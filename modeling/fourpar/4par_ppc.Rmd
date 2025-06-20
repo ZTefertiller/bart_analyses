@@ -1,0 +1,189 @@
+---
+title: "4par_ppc"
+author: "Zach Tefertiller"
+date: "2025-06-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(cmdstanr)
+library(posterior)
+library(bayesplot)
+library(ggplot2)
+library(tibble)
+library(dplyr)
+library(purrr)
+library(tidyr)
+library(readr)
+
+# --- SETUP ---
+output_dir <- file.path(Sys.getenv("HOME"), "Desktop", "fourpar_ppc_trials")
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+# --- FITTED MODEL OBJECT ---
+fit <- fourpar  # replace with your fitted model object
+stan_data <- your_stan_data  # replace with your Stan data object
+
+# --- PREPARE DATA FOR PPC ---
+stan_data_ppc <- list(
+  nsub = stan_data$nsub,
+  ntrial = stan_data$ntrial,
+  maxpump = stan_data$maxpump,
+  Tsubj = stan_data$Tsubj,
+  npumps = stan_data$npumps,
+  outcome = stan_data$outcome
+)
+
+# --- RUN PPC ---
+ppc_model <- cmdstan_model("4par_ppc.stan")
+
+ppc_fit <- ppc_model$generate_quantities(
+  fitted_params = fit,
+  data = stan_data_ppc
+)
+
+# --- EXTRACT PREDICTIONS ---
+observed_total_pumps <- stan_data$npumps
+raw_array <- ppc_fit$draws("npumps_pred", format = "draws_array")  
+
+draw_matrix <- as_draws_matrix(raw_array)  
+nsub <- stan_data$nsub
+ntrial <- stan_data$ntrial
+n_iter <- nrow(draw_matrix)
+
+draws_total_pumps <- array(draw_matrix, dim = c(n_iter, nsub, ntrial))
+
+# --- SUBJECT-LEVEL PPC PLOTS ---
+ppc_summary_list <- list()
+participant_ids <- stan_data$sub_ids  # replace with your actual participant IDs if different
+
+for (subject_id in 1:nsub) {
+  yobs <- observed_total_pumps[subject_id, ]
+  yrep <- draws_total_pumps[, subject_id, ]
+
+  ppc_df <- tibble(
+    trial = 1:length(yobs),
+    subject_id = subject_id,
+    observed = yobs,
+    predicted_mean = colMeans(yrep),
+    predicted_lower = apply(yrep, 2, quantile, probs = 0.05),
+    predicted_upper = apply(yrep, 2, quantile, probs = 0.95)
+  )
+
+  participant_label <- participant_ids[subject_id]
+
+  p <- ggplot(ppc_df, aes(x = trial)) +
+    geom_ribbon(aes(ymin = predicted_lower, ymax = predicted_upper), fill = "lightblue", alpha = 0.5) +
+    geom_line(aes(y = predicted_mean, color = "Model Prediction"), size = 0.5) +
+    geom_line(aes(y = observed, color = "Observation"), linetype = "dashed", size = 0.5) +
+    scale_color_manual(name = "Source", values = c("Model Prediction" = "blue", "Observation" = "black")) +
+    labs(title = paste("Participant", participant_label), x = "Trial", y = "Number of Pumps") +
+    theme_minimal() +
+    theme(legend.position = "top")
+
+  ggsave(file.path(output_dir, paste0("ppc_participant_", participant_label, ".png")),
+         plot = p, width = 6, height = 4, dpi = 600, bg = "white")
+
+  ppc_summary_list[[subject_id]] <- ppc_df
+}
+
+ppc_all_df <- bind_rows(ppc_summary_list)
+write_csv(ppc_all_df, file.path(output_dir, "ppc_summary_all_subjects.csv"))
+
+# --- TRIAL-WISE SCATTERPLOTS ---
+balloon_color_labeled <- matrix(
+  dplyr::recode(stan_data$balloon_color, `1` = "blue", `2` = "orange", `3` = "yellow"),
+  nrow = nsub, ncol = ntrial
+)
+
+scatter_df <- tibble()
+for (subject_id in 1:nsub) {
+  yobs <- observed_total_pumps[subject_id, ]
+  yrep <- draws_total_pumps[, subject_id, ]
+  color_labels <- balloon_color_labeled[subject_id, ]
+
+  subject_df <- tibble(
+    subject_id = subject_id,
+    trial = 1:length(yobs),
+    observed = yobs,
+    predicted = colMeans(yrep),
+    balloon_color = color_labels
+  )
+
+  scatter_df <- bind_rows(scatter_df, subject_df)
+}
+
+write_csv(scatter_df, file.path(output_dir, "scatter_all_data.csv"))
+
+create_trial_scatter <- function(trial_number, data) {
+  trial_data <- filter(data, trial == trial_number)
+  cor_val <- cor(trial_data$observed, trial_data$predicted, use = "complete.obs")
+  cor_text <- sprintf("r = %.3f", cor_val)
+
+  max_val <- max(c(trial_data$observed, trial_data$predicted), na.rm = TRUE)
+  min_val <- min(c(trial_data$observed, trial_data$predicted), na.rm = TRUE)
+
+  ggplot(trial_data, aes(x = predicted, y = observed, color = balloon_color)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
+    geom_point(alpha = 0.7) +
+    annotate("text", x = min_val + 0.1*(max_val - min_val), 
+             y = max_val - 0.1*(max_val - min_val), label = cor_text) +
+    coord_fixed(ratio = 1) +
+    scale_color_manual(values = c("blue" = "blue", "orange" = "orange", "yellow" = "gold")) +
+    labs(
+      title = paste("Trial", trial_number),
+      x = "Predicted Number of Pumps",
+      y = "Observed Number of Pumps",
+      color = "Balloon Color"
+    ) +
+    theme_minimal()
+}
+
+for (t in unique(scatter_df$trial)) {
+  p <- create_trial_scatter(t, scatter_df)
+  ggsave(
+    filename = file.path(output_dir, paste0("trial_", sprintf("%03d", t), "_scatter.png")),
+    plot = p,
+    width = 6,
+    height = 6,
+    dpi = 600,
+    bg = "white"
+  )
+}
+
+# --- AGGREGATE COLOR-WISE SCATTERPLOTS ---
+create_color_scatter <- function(color_name, data) {
+  color_data <- filter(data, balloon_color == color_name)
+  cor_val <- cor(color_data$observed, color_data$predicted, use = "complete.obs")
+  cor_text <- sprintf("r = %.3f", cor_val)
+
+  max_val <- max(c(color_data$observed, color_data$predicted), na.rm = TRUE)
+  min_val <- min(c(color_data$observed, color_data$predicted), na.rm = TRUE)
+
+  ggplot(color_data, aes(x = predicted, y = observed)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
+    geom_point(color = color_name, alpha = 0.5) +
+    annotate("text", x = min_val + 0.1*(max_val - min_val), 
+             y = max_val - 0.1*(max_val - min_val), label = cor_text) +
+    coord_fixed(ratio = 1) +
+    labs(
+      title = paste("All", color_name, "Trials"),
+      x = "Predicted Number of Pumps",
+      y = "Observed Number of Pumps"
+    ) +
+    theme_minimal()
+}
+
+for (color in c("blue", "orange", "yellow")) {
+  p <- create_color_scatter(color, scatter_df)
+  ggsave(
+    filename = file.path(output_dir, paste0("scatter_all_", color, ".png")),
+    plot = p,
+    width = 6,
+    height = 6,
+    dpi = 600,
+    bg = "white"
+  )
+}
+
+```
