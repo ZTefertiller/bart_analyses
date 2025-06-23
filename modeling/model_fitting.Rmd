@@ -413,15 +413,6 @@ fourpar_df <- tibble(participant_id = unique(df$participant_id)) %>%
     fourpar_tau = sapply(1:nsub, function(j) mean(rebuild_tau(j)))
   )
 
-df_params_combined <- df_questionnaires %>%
-  left_join(fourpar_df, by = "participant_id")
-
-
-
-
-
-
-
 # EWMV
 
 ewmv_draws <- ewmv$draws(
@@ -441,12 +432,6 @@ ewmv_params <- tibble(participant_id = sub_ids) |>
     ewmv_tau    = sapply(1:nsub, function(j) mean(ewmv_draws[[sprintf("tau[%d]",    j)]])),
     ewmv_lambda = sapply(1:nsub, function(j) mean(ewmv_draws[[sprintf("lambda[%d]", j)]]))
   )
-
-df_params_combined <- df_questionnaires |>
-  left_join(ewmv_params, by = "participant_id")
-
-
-
 
 # STL
 
@@ -469,8 +454,12 @@ stl_params <- tibble(subj = 1:nsub) |>
   ) |>
   select(participant_id, starts_with("stl_"))
 
+
+# aggregate 
 df_params_combined <- df_questionnaires |>
-  left_join(stl_params, by = "participant_id")
+  left_join(fourpar_df,  by = "participant_id") |>
+  left_join(ewmv_params, by = "participant_id") |>
+  left_join(stl_params,  by = "participant_id")
 
 ```
 
@@ -558,4 +547,111 @@ df_with_preds <- df_with_preds |>
   left_join(stl_pred_tbl,
             by = c("participant_id",
                    "trial_number" = "trial"))
+```
+
+```{r summary data}
+df_with_preds <- df_with_preds %>%
+  mutate(cigarettes_count = tidyr::replace_na(cigarettes_count, 0))
+
+# -------------------------------------------------------------------------
+# 1.  Adjusted-inflation metrics  (blue/orange/yellow × pre/post/total)
+# -------------------------------------------------------------------------
+color_map <- c("b" = "blue", "o" = "orange", "y" = "yellow")
+
+infl_summary <- df_with_preds %>%
+  filter(popped != 1) %>%                                # only trials that did NOT pop
+  mutate(
+    color  = recode(balloon_color, !!!color_map),
+    period = if_else(trial_number <= 90, "pre", "post")
+  ) %>%
+  group_by(participant_id, color, period) %>%
+  summarise(mean_infl = mean(inflations, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = c(color, period),
+              values_from = mean_infl,
+              names_glue  = "{color}_{period}")           # blue_pre, orange_post, …
+
+total_summary <- df_with_preds %>%
+  filter(popped != 1) %>%
+  mutate(color = recode(balloon_color, !!!color_map)) %>%
+  group_by(participant_id, color) %>%
+  summarise(mean_infl = mean(inflations, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = color,
+              values_from = mean_infl,
+              names_glue  = "{color}_total")              # blue_total …
+
+# -------------------------------------------------------------------------
+# 2.  Reaction-time metric
+# -------------------------------------------------------------------------
+rt_summary <- df_with_preds %>%
+  group_by(participant_id) %>%
+  summarise(average_rt_total = mean(average_inflation_rt, na.rm = TRUE),
+            .groups = "drop")
+
+# -------------------------------------------------------------------------
+# 3.  Schizotypy aggregate score
+# -------------------------------------------------------------------------
+sz_summary <- df_with_preds %>%
+  group_by(participant_id) %>%
+  summarise(
+    schizotypy_aggregate = first(
+      coalesce(spq_total, 0) +
+      coalesce(caps_total, 0) +
+      coalesce(pdi_total, 0)
+    ),
+    .groups = "drop"
+  )
+
+# -------------------------------------------------------------------------
+# 4.  Gather all new participant-level columns
+#     (df_params_combined already has fourpar_ / ewmv_ / stl_ params)
+# -------------------------------------------------------------------------
+participant_enhanced <- df_params_combined %>%             # <- already unique rows
+  left_join(infl_summary,  by = "participant_id") %>%
+  left_join(total_summary, by = "participant_id") %>%
+  left_join(rt_summary,    by = "participant_id") %>%
+  left_join(sz_summary,by = "participant_id")
+
+# -------------------------------------------------------------------------
+# 5.  Attach new columns back to every trial row
+# -------------------------------------------------------------------------
+df_with_preds <- df_with_preds %>%
+  left_join(participant_enhanced %>%
+              select(participant_id,
+                     starts_with("blue_"),
+                     starts_with("orange_"),
+                     starts_with("yellow_"),
+                     average_rt_total,
+                     schizotypy_aggregate),
+            by = "participant_id")
+
+# -------------------------------------------------------------------------
+# 6.  Write full trial-level data to CSV
+# -------------------------------------------------------------------------
+write_csv(df_with_preds, "bart_rl_180_modeled.csv")
+
+# -------------------------------------------------------------------------
+# 7.  Build the requested summary_dataframe
+# -------------------------------------------------------------------------
+summary_cols <- c(
+  "participant_id", "total_pops", "task_time",
+  # adjusted-inflation columns
+  "blue_pre","orange_pre","yellow_pre",
+  "blue_post","orange_post","yellow_post",
+  "blue_total","orange_total","yellow_total",
+  # reaction time + aggregate scores
+  "average_rt_total", "schizotypy_aggregate",
+  # questionnaire totals
+  "spq_total","ipip_total","pdi_total","pdi_distress",
+  "pdi_frequency","pdi_conviction",
+  "caps_total","caps_distress","caps_intrusiveness","caps_frequency",
+  "phq_total","ppgm_total","mdq_total",
+  # subj index
+  "subj"
+)
+
+summary_dataframe <- df_with_preds %>%
+  distinct(participant_id, .keep_all = TRUE) %>%   # one row per participant
+  select(any_of(summary_cols))
+
+
 ```
