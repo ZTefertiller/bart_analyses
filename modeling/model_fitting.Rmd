@@ -368,7 +368,7 @@ ggplot(df, aes(x= reorder(model,elpd_diff), y=elpd_diff)) +
 
 ```{r fit parameters to original dataframe}
 
-## fourpar model first
+## 4PAR
 ## model parameters are in pre transformed state so participant level parameters need to be
 ## passed through the same transformation as in the st (4par.stan) file
 
@@ -422,8 +422,55 @@ df_params_combined <- df_questionnaires %>%
 
 
 
+# EWMV
+
+ewmv_draws <- ewmv$draws(
+  variables = c("phi", "eta", "rho", "tau", "lambda")
+) |>
+  as_draws_df() |>
+  as.data.frame()
+
+nsub      <- stan_data$nsub
+sub_ids   <- unique(df$participant_id)  
+
+ewmv_params <- tibble(participant_id = sub_ids) |>
+  mutate(
+    ewmv_phi    = sapply(1:nsub, function(j) mean(ewmv_draws[[sprintf("phi[%d]",    j)]])),
+    ewmv_eta    = sapply(1:nsub, function(j) mean(ewmv_draws[[sprintf("eta[%d]",    j)]])),
+    ewmv_rho    = sapply(1:nsub, function(j) mean(ewmv_draws[[sprintf("rho[%d]",    j)]])),
+    ewmv_tau    = sapply(1:nsub, function(j) mean(ewmv_draws[[sprintf("tau[%d]",    j)]])),
+    ewmv_lambda = sapply(1:nsub, function(j) mean(ewmv_draws[[sprintf("lambda[%d]", j)]]))
+  )
+
+df_params_combined <- df_questionnaires |>
+  left_join(ewmv_params, by = "participant_id")
 
 
+
+
+# STL
+
+stl_draws <- stl$draws(
+  variables = c("vwin", "vloss", "beta", "omegaone")
+) |>
+  as_draws_df() |>
+  as.data.frame()
+
+nsub       <- stan_data$nsub
+id_lookup  <- unique(df$participant_id)
+
+stl_params <- tibble(subj = 1:nsub) |>
+  mutate(
+    stl_vwin     = sapply(subj, \(j) mean(stl_draws[[sprintf("vwin[%d]",     j)]])),
+    stl_vloss    = sapply(subj, \(j) mean(stl_draws[[sprintf("vloss[%d]",    j)]])),
+    stl_beta     = sapply(subj, \(j) mean(stl_draws[[sprintf("beta[%d]",     j)]])),
+    stl_omegaone = sapply(subj, \(j) mean(stl_draws[[sprintf("omegaone[%d]", j)]])),
+    participant_id = id_lookup[subj]            # convert index → character ID
+  ) |>
+  select(participant_id, starts_with("stl_"))
+
+df_params_combined <- df_questionnaires |>
+  left_join(stl_params, by = "participant_id")
 
 ```
 
