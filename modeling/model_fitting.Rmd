@@ -551,51 +551,39 @@ df_with_preds <- df_with_preds |>
 ```
 
 ```{r summary data}
-
-# -------------------------------------------------------------------------
-# 0) clean cigarettes_count  ------------------------------------------------
+## 0) clean cigarettes_count  ----------------------------------------------
 df_with_preds <- df_with_preds %>%
-  mutate(cigarettes_count = tidyr::replace_na(cigarettes_count, 0))
+  mutate(cigarettes_count = replace_na(cigarettes_count, 0))
 
-# -------------------------------------------------------------------------
-# 1) adjusted-inflation means (color × pre/post/total) ----------------------
+## 1) adjusted-inflation means (color × pre/post/total) --------------------
 color_map <- c("b" = "blue", "o" = "orange", "y" = "yellow")
 
 infl_summary <- df_with_preds %>%
   filter(popped != 1) %>%
-  mutate(
-    color  = recode(balloon_color, !!!color_map),
-    period = if_else(trial_number <= 90, "pre", "post")
-  ) %>%
+  mutate(color  = recode(balloon_color, !!!color_map),
+         period = if_else(trial_number <= 90, "pre", "post")) %>%
   group_by(participant_id, color, period) %>%
   summarise(mean_infl = mean(inflations, na.rm = TRUE), .groups = "drop") %>%
-  pivot_wider(
-    names_from  = c(color, period),
-    values_from = mean_infl,
-    names_glue  = "{color}_{period}"
-  )
+  pivot_wider(names_from  = c(color, period),
+              values_from = mean_infl,
+              names_glue  = "{color}_{period}")
 
 total_summary <- df_with_preds %>%
   filter(popped != 1) %>%
   mutate(color = recode(balloon_color, !!!color_map)) %>%
   group_by(participant_id, color) %>%
   summarise(mean_infl = mean(inflations, na.rm = TRUE), .groups = "drop") %>%
-  pivot_wider(
-    names_from  = color,
-    values_from = mean_infl,
-    names_glue  = "{color}_total"
-  )
+  pivot_wider(names_from  = color,
+              values_from = mean_infl,
+              names_glue  = "{color}_total")
 
-# -------------------------------------------------------------------------
-# 2) average reaction time --------------------------------------------------
+## 2) average RT & schizotypy  ---------------------------------------------
 rt_summary <- df_with_preds %>%
   group_by(participant_id) %>%
   summarise(average_rt_total = mean(average_inflation_rt, na.rm = TRUE),
             .groups = "drop")
 
-# -------------------------------------------------------------------------
-# 3) schizotypy aggregate ---------------------------------------------------
-schizo_summary <- df_with_preds %>%
+sz_summary <- df_with_preds %>%
   group_by(participant_id) %>%
   summarise(
     schizotypy_aggregate = first(
@@ -606,62 +594,67 @@ schizo_summary <- df_with_preds %>%
     .groups = "drop"
   )
 
-# -------------------------------------------------------------------------
-# 4) gather participant-level info (model params + new metrics) -------------
+## 3) demographics to keep (age + cigarettes) ------------------------------
+demo_cols <- df_with_preds %>%
+  distinct(participant_id, age, cigarettes_count)
+
+## 4) model-parameter columns  ---------------------------------------------
 param_cols <- c(
   "fourpar_phi","fourpar_eta","fourpar_gam","fourpar_tau",
   "ewmv_phi","ewmv_eta","ewmv_rho","ewmv_tau","ewmv_lambda",
   "stl_vwin","stl_vloss","stl_beta","stl_omegaone"
 )
+missing <- setdiff(param_cols, names(df_params_combined))
+if (length(missing))
+  stop("Missing parameter columns in df_params_combined: ",
+       paste(missing, collapse = ", "))
 
-participant_enhanced <- df_params_combined %>%          # already one row per id
-  left_join(infl_summary,  by = "participant_id") %>%
-  left_join(total_summary, by = "participant_id") %>%
-  left_join(rt_summary,    by = "participant_id") %>%
-  left_join(schizo_summary,by = "participant_id")
+## 5) build participant_enhanced  ------------------------------------------
+participant_enhanced <- df_params_combined %>%        # has all params
+  left_join(demo_cols,       by = "participant_id") %>%
+  left_join(infl_summary,    by = "participant_id") %>%
+  left_join(total_summary,   by = "participant_id") %>%
+  left_join(rt_summary,      by = "participant_id") %>%
+  left_join(sz_summary,  by = "participant_id")
 
-# -------------------------------------------------------------------------
-# 5) add those columns onto every trial row ---------------------------------
+## 6) attach participant metrics to every trial row ------------------------
 df_with_preds <- df_with_preds %>%
   left_join(
     participant_enhanced %>%
       select(participant_id,
+             age, cigarettes_count,
              all_of(param_cols),
              starts_with("blue_"), starts_with("orange_"), starts_with("yellow_"),
              average_rt_total, schizotypy_aggregate),
     by = "participant_id"
   )
 
-# -------------------------------------------------------------------------
-# 6) write trial-level CSV ---------------------------------------------------
-write_csv(df_with_preds, "bart_rl_modeled.csv")
+## 7) write full trial-level CSV -------------------------------------------
+write_csv(df_with_preds, "bart_rl_all.csv")
 
-# -------------------------------------------------------------------------
-# 7) build summary_dataframe -------------------------------------------------
+## 8) build summary_dataframe (one row per participant) ---------------------
 summary_cols <- c(
   "participant_id","total_pops","task_time",
   # adjusted inflations
   "blue_pre","orange_pre","yellow_pre",
   "blue_post","orange_post","yellow_post",
   "blue_total","orange_total","yellow_total",
-  # RT + aggregate
-  "average_rt_total","schizotypy_aggregate",
+  # RT, schizotypy, demographics
+  "average_rt_total","schizotypy_aggregate","age","cigarettes_count",
   # questionnaires
   "spq_total","ipip_total","pdi_total","pdi_distress",
   "pdi_frequency","pdi_conviction",
   "caps_total","caps_distress","caps_intrusiveness","caps_frequency",
   "phq_total","ppgm_total","mdq_total",
-  # subj index
-  "subj",
   # model parameters
   param_cols
 )
 
-summary_dataframe <- df_with_preds %>%
-  distinct(participant_id, .keep_all = TRUE) %>%
+summary_dataframe <- participant_enhanced %>%     # already one row per ID
+  left_join(df_with_preds %>%                     # bring total_pops, task_time
+              distinct(participant_id, total_pops, task_time),
+            by = "participant_id") %>%
   select(any_of(summary_cols))
 
-# (optional) write summary
-write_csv(summary_dataframe, "bart_rl_summary.csv")
-
+write_csv(summary_dataframe, "bart_rl_summary.csv")   # uncomment if desired
 ```
