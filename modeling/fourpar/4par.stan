@@ -146,6 +146,11 @@ generated quantities {
   real<lower=0.01> mu_eta = 0.01 + exp(mu_pr[2]);
   real<lower=0.01> mu_gam = 0.01 + exp(mu_pr[3]);
   real<lower=0.01> mu_tau = 0.01 + exp(mu_pr[4]);
+  
+  vector[nsub] phi_out = phi;   // subject-level burst prior
+  vector[nsub] eta_out = eta;   // learning-rate
+  vector[nsub] gam_out = gam;   // risk coefficient
+  vector[nsub] tau_out = tau;   // inverse-temperature
 
   // Trial-level log-likelihoods for LOO/WAIC
   array[nsub, ntrial] real log_lik;
