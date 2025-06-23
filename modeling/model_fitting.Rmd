@@ -1,5 +1,5 @@
 # ---
-# title:  "STL_model_fit"
+# title:  "model_fitting"
 # author: "Zach Tefertiller"
 # date:   "2025-02-24"
 # output: html_document
@@ -363,4 +363,65 @@ ggplot(df, aes(x= reorder(model,elpd_diff), y=elpd_diff)) +
 #subj level rhat avg
 ```
 
+
+```{r fit parameters to original dataframe}
+
+## fourpar model first
+## model parameters are in pre transformed state so participant level parameters need to be
+## passed through the same transformation as in the st (4par.stan) file
+
+fourpar_df <- as_draws_df(fourpar) %>% as.data.frame()
+
+# matching to the ordered df_questionnaires as seen in the stan_data
+nsub <- stan_data$nsub
+sub_ids <- stan_data$sub_ids 
+
+
+# need to reconstruct the transformed parameters because forgot to save in generated quantities
+# this has been fixed in the stan file but for my current data reconstruction is necessary
+mu1  <- fourpar_df$`mu_pr[1]`
+mu2  <- fourpar_df$`mu_pr[2]`
+mu3  <- fourpar_df$`mu_pr[3]`
+mu4  <- fourpar_df$`mu_pr[4]`
+
+sig1 <- fourpar_df$`sigma[1]`
+sig2 <- fourpar_df$`sigma[2]`
+sig3 <- fourpar_df$`sigma[3]`
+sig4 <- fourpar_df$`sigma[4]`
+
+rebuild_phi <- function(j) {
+  0.01 + 0.98 * pnorm(mu1 + sig1 * fourpar_df[[sprintf("phi_pr[%d]", j)]])
+}
+rebuild_eta <- function(j) {
+  0.01 + exp(mu2 + sig2 * fourpar_df[[sprintf("eta_pr[%d]", j)]])
+}
+rebuild_gam <- function(j) {
+  0.01 + exp(mu3 + sig3 * fourpar_df[[sprintf("gam_pr[%d]", j)]])
+}
+rebuild_tau <- function(j) {
+  0.01 + exp(mu4 + sig4 * fourpar_df[[sprintf("tau_pr[%d]", j)]])
+}
+
+nsub <- stan_data$nsub
+fourpar_df <- tibble(participant_id = unique(df$participant_id)) %>%
+  mutate(
+    fourpar_phi = sapply(1:nsub, function(j) mean(rebuild_phi(j))),
+    fourpar_eta = sapply(1:nsub, function(j) mean(rebuild_eta(j))),
+    fourpar_gam = sapply(1:nsub, function(j) mean(rebuild_gam(j))),
+    fourpar_tau = sapply(1:nsub, function(j) mean(rebuild_tau(j)))
+  )
+
+df_params_combined <- df_questionnaires %>%
+  left_join(fourpar_df, by = "participant_id")
+
+
+
+
+
+
+
+
+
+
+```
 
