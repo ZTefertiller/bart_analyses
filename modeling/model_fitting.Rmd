@@ -531,4 +531,31 @@ df_with_preds <- df_with_preds |>
   left_join(ewmv_pred_tbl,
             by = c("participant_id",
                    "trial_number" = "trial"))
+
+# stl 
+# same kind of gen quantities case taking from stl_ppc.stan and stl_vec_ppc.Rmd
+# run those after loading in the mcmc data if you haven't yet
+
+stl_raw <- stl_ppc_fit$draws("npumps_pred", format = "draws_array")
+stl_mat   <- as_draws_matrix(stl_raw)
+n_iter    <- nrow(stl_mat)
+nsub      <- stan_data$nsub
+ntrial    <- stan_data$ntrial
+stl_arr   <- array(stl_mat, dim = c(n_iter, nsub, ntrial))
+
+stl_mean  <- apply(stl_arr, c(2, 3), mean)   # nsub × ntrial
+
+stl_pred_tbl <- as.data.frame.table(stl_mean,
+                                    responseName = "stl_pred") |>
+  mutate(
+    subj  = as.integer(Var1),
+    trial = as.integer(Var2),
+    participant_id = unique(df$participant_id)[subj]
+  ) |>
+  select(participant_id, trial, stl_pred)
+
+df_with_preds <- df_with_preds |>
+  left_join(stl_pred_tbl,
+            by = c("participant_id",
+                   "trial_number" = "trial"))
 ```
