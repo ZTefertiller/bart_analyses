@@ -20,6 +20,8 @@ library(pryr)
 library(loo)
 library(cmdstanr)
 library(posterior)
+library(tidyr)
+library(stringr)
 
 
 # initial setup for my own task design, adapt balloon_color in the code and dataset as needed.
@@ -425,3 +427,33 @@ df_params_combined <- df_questionnaires %>%
 
 ```
 
+
+```{r model predicted pumps}
+# fourpar
+pred_draws <- fourpar$draws(variables = "npumps_pred") |>
+  as_draws_df() |>
+  as.data.frame()
+
+long_pred <- pred_draws |>
+  mutate(.iter = row_number()) |>
+  pivot_longer(
+    cols       = starts_with("npumps_pred["),
+    names_to   = "param",
+    values_to  = "pred_pumps"
+  ) |>
+  mutate(
+    subj  = as.integer(stringr::str_extract(param, "(?<=\\[)\\d+")),
+    trial = as.integer(stringr::str_extract(param, "(?<=,)\\d+"))
+  ) |>
+  select(.iter, subj, trial, pred_pumps)
+
+pred_mean <- long_pred |>
+  group_by(subj, trial) |>
+  summarise(fourpar_pred = mean(pred_pumps), .groups = "drop") |>
+  mutate(participant_id = unique(df$participant_id)[subj])
+
+df_with_preds <- df |>
+  left_join(pred_mean,
+            by = c("participant_id",
+                   "trial_number" = "trial"))
+```
