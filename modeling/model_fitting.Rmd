@@ -503,4 +503,32 @@ df_with_preds <- df |>
   left_join(pred_mean,
             by = c("participant_id",
                    "trial_number" = "trial"))
+
+# ewmv
+# since we made the gen quantities block separate for ppcs we need to grab them
+# from the ewmv_ppc.stan gen quantities fit object 
+# if not in environment you need to run the ewmv_vec_ppc.Rmd script
+
+tp_draws <- ewmv_ppc_fit$draws("total_pumps", format = "draws_array")
+tp_mat <- as_draws_matrix(tp_draws)
+
+n_iter  <- nrow(tp_mat)
+nsub    <- stan_data$nsub
+ntrial  <- stan_data$ntrial
+
+tp_array <- array(tp_mat, dim = c(n_iter, nsub, ntrial))
+ewmv_pred_mat <- apply(tp_array, c(2,3), mean)
+
+ewmv_pred_tbl <- as.data.frame.table(ewmv_pred_mat,
+                                     responseName = "ewmv_pred") |>
+  mutate(
+    subj  = as.integer(Var1),
+    trial = as.integer(Var2),
+    participant_id = unique(df$participant_id)[subj]
+  ) |>
+  select(participant_id, trial, ewmv_pred)
+df_with_preds <- df_with_preds |>
+  left_join(ewmv_pred_tbl,
+            by = c("participant_id",
+                   "trial_number" = "trial"))
 ```
