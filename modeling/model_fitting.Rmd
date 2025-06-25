@@ -183,6 +183,41 @@ create_stan_params <- function(df, include_questionnaires = FALSE) {
 stan_data <- create_stan_params(df)
 ```
 
+```{separate pre and post reversal for ewmv}
+
+df_trials_1_90 <- df %>% filter(trial_number <= 90)
+df_trials_91_180 <- df %>% filter(trial_number > 90)
+
+
+stan_data_1_90 <- create_stan_params(df_trials_1_90)
+stan_data_91_180 <- create_stan_params(df_trials_91_180)
+
+ewmv_1_90 <- cmd_stan_fit(stan_data_1_90, "ewmv_trials_1_90")
+ewmv_91_180 <- cmd_stan_fit(stan_data_91_180, "ewmv_trials_91_180")
+
+variables_1_90 <- ewmv_1_90$draws() %>% variables()
+group_params_1_90 <- grep("mu", variables_1_90, value = TRUE)
+group_draws_1_90 <- ewmv_1_90$draws(variables = group_params_1_90)
+summary_1_90 <- ewmv_1_90$summary()
+print("Summary for Trials 1-90:")
+print(summary_1_90)
+
+variables_91_180 <- ewmv_91_180$draws() %>% variables()
+group_params_91_180 <- grep("mu", variables_91_180, value = TRUE)
+group_draws_91_180 <- ewmv_91_180$draws(variables = group_params_91_180)
+summary_91_180 <- ewmv_91_180$summary()
+print("Summary for Trials 91-180:")
+print(summary_91_180)
+
+
+
+```
+
+
+
+
+
+
 ```{r cmdstan equivalent because of compiler issue or ARM}
 cmd_stan_fit <- function(data, fit_name = "default") {
   model_path <- "stl_vec.stan"
