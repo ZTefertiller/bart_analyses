@@ -183,7 +183,7 @@ create_stan_params <- function(df, include_questionnaires = FALSE) {
 stan_data <- create_stan_params(df)
 ```
 
-```{separate pre and post reversal for ewmv}
+```{r pre and post reversal for ewmv}
 
 df_trials_1_90 <- df %>% filter(trial_number <= 90)
 df_trials_91_180 <- df %>% filter(trial_number > 90)
@@ -220,9 +220,10 @@ print(summary_91_180)
 
 ```{r cmdstan equivalent because of compiler issue or ARM}
 cmd_stan_fit <- function(data, fit_name = "default") {
-  model_path <- "stl_vec.stan"
+  model_path <- "ewmv/ewmv_vec.stan"
+  output_dir <- "/Volumes/Transcend/mcmc/"
   #output_path <- paste0("/media/ztefertiller/MRS_rsfMRI/zach_mcmc", fit_name, ".rds")
-  output_path <- paste0("~/desktop", fit_name, ".rds")
+  output_path <- paste0(output_dir, fit_name, ".rds")
 
   memory_used <- mem_change({
     mod <- cmdstan_model(model_path,  cpp_options = list(stan_threads = TRUE))
@@ -230,12 +231,13 @@ cmd_stan_fit <- function(data, fit_name = "default") {
     fit <- mod$sample(
       data = data,
       iter_warmup = 1000,
-      iter_sampling = 1000,
+      iter_sampling = 2000,
       chains = 4,
       parallel_chains = 4,
       threads_per_chain = 7,
       seed = 10191998,
       refresh = 500,  # adjusts console output
+      output_dir = output_dir,
     )
   })
 
