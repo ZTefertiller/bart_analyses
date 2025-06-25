@@ -1,0 +1,56 @@
+---
+title: "block_calculations"
+author: "Zach Tefertiller"
+date: "2025-06-25"
+output: html_document
+---
+
+```{r}
+# Assume df is your dataframe
+colors <- c("b", "o", "y")
+block_size <- 10
+
+# Function to calculate block statistics per color
+calculate_block_stats <- function(df, color_label, block_num) {
+  block_name <- paste0(color_label, block_num)
+  
+  df %>%
+    group_by(participant_id) %>%
+    filter(balloon_color == color_label) %>%
+    mutate(color_trial_order = row_number()) %>%
+    filter(color_trial_order > (block_num - 1) * block_size &
+           color_trial_order <= block_num * block_size) %>%
+    summarise(
+      !!paste0(block_name, "_avg") := mean(inflations, na.rm = TRUE),
+      !!paste0(block_name, "_sd") := sd(inflations, na.rm = TRUE),
+      !!paste0(block_name, "_adj") := mean(inflations[popped == 0], na.rm = TRUE),
+      !!paste0(block_name, "_earnings") := mean(inflations[popped == 0], na.rm = TRUE) * 0.003,
+      .groups = "drop"
+    )
+}
+
+# Calculate blocks for each color and bind them
+blocks_df <- NULL
+
+for(color_label in colors) {
+  for(block_num in 1:6) { # assuming you have up to 6 blocks per color (1-60 trials per color)
+    block_stats <- calculate_block_stats(df, color_label, block_num)
+    blocks_df <- if(is.null(blocks_df)) block_stats else full_join(blocks_df, block_stats, by = "participant_id")
+  }
+}
+
+# Join the new data to the original dataframe (repeated values per participant)
+df_extended <- left_join(df, blocks_df, by = "participant_id")
+```
+
+### Group-Level Summary
+
+Calculate the mean and standard deviation across all participants:
+
+```{r}
+group_df <- blocks_df %>%
+  summarise(across(-participant_id, list(avg_all = ~mean(.x, na.rm = TRUE), sd_all = ~sd(.x, na.rm = TRUE))))
+
+# Append group-level data to the original dataframe (as single row repeated)
+df_extended <- bind_cols(df_extended, group_df[rep(1, nrow(df_extended)), ])
+```
