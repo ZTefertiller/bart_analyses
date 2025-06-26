@@ -54,3 +54,349 @@ group_df <- blocks_df %>%
 # Append group-level data to the original dataframe (as single row repeated)
 df_extended <- bind_cols(df_extended, group_df[rep(1, nrow(df_extended)), ])
 ```
+
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(tidyr)
+```
+
+### Data Preparation
+
+Replace `df` with your actual dataframe name.
+
+```{r}
+# Assume df is your dataframe
+colors <- c("b", "o", "y")
+block_size <- 10
+
+# Function to calculate block statistics per color
+calculate_block_stats <- function(df, color_label, block_num) {
+  block_name <- paste0(color_label, block_num)
+  
+  df %>%
+    group_by(participant_id) %>%
+    filter(balloon_color == color_label) %>%
+    mutate(color_trial_order = row_number()) %>%
+    filter(color_trial_order > (block_num - 1) * block_size &
+           color_trial_order <= block_num * block_size) %>%
+    summarise(
+      !!paste0(block_name, "_avg") := mean(inflations, na.rm = TRUE),
+      !!paste0(block_name, "_part_sd") := sd(inflations, na.rm = TRUE),
+      !!paste0(block_name, "_adj") := mean(inflations[popped == 0], na.rm = TRUE),
+      !!paste0(block_name, "_earnings") := sum(inflations[popped == 0], na.rm = TRUE) * 0.003,
+      .groups = "drop"
+    )
+}
+
+# Calculate blocks for each color and bind them
+blocks_df <- NULL
+
+for(color_label in colors) {
+  for(block_num in 1:6) { # assuming you have up to 6 blocks per color (1-60 trials per color)
+    block_stats <- calculate_block_stats(df, color_label, block_num)
+    blocks_df <- if(is.null(blocks_df)) block_stats else full_join(blocks_df, block_stats, by = "participant_id")
+  }
+}
+
+# Join the new data to the original dataframe (repeated values per participant)
+df_extended <- left_join(df, blocks_df, by = "participant_id")
+```
+
+### Group-Level Summary
+
+Calculate the mean and standard deviation from the distribution of block averages across all participants:
+
+```{r}
+group_df <- blocks_df %>%
+  summarise(across(-participant_id, 
+                   list(avg_all = ~mean(.x, na.rm = TRUE), 
+                        sd_all = ~sd(.x, na.rm = TRUE))))
+
+# Append group-level data to the original dataframe (as single row repeated)
+df_extended <- bind_cols(df_extended, group_df[rep(1, nrow(df_extended)), ])
+```
+
+
+
+
+
+
+```{r}
+# Assume df is your dataframe
+colors <- c("b", "o", "y")
+block_size <- 10
+
+# Function to calculate block statistics per color
+calculate_block_stats <- function(df, color_label, block_num) {
+  block_name <- paste0(color_label, block_num)
+  
+  df %>%
+    group_by(participant_id) %>%
+    filter(balloon_color == color_label) %>%
+    mutate(color_trial_order = row_number()) %>%
+    filter(color_trial_order > (block_num - 1) * block_size &
+           color_trial_order <= block_num * block_size) %>%
+    summarise(
+      !!paste0(block_name, "_avg") := mean(inflations, na.rm = TRUE),
+      !!paste0(block_name, "_part_sd") := sd(inflations, na.rm = TRUE),
+      !!paste0(block_name, "_adj") := mean(inflations[popped == 0], na.rm = TRUE),
+      !!paste0(block_name, "_earnings") := sum(inflations[popped == 0], na.rm = TRUE) * 0.003,
+      .groups = "drop"
+    )
+}
+
+# Calculate blocks for each color and bind them
+blocks_df <- NULL
+
+for(color_label in colors) {
+  for(block_num in 1:6) { # assuming you have up to 6 blocks per color (1-60 trials per color)
+    block_stats <- calculate_block_stats(df, color_label, block_num)
+    blocks_df <- if(is.null(blocks_df)) block_stats else full_join(blocks_df, block_stats, by = "participant_id")
+  }
+}
+
+# Join the new data to the original dataframe (repeated values per participant)
+df_extended <- left_join(df, blocks_df, by = "participant_id")
+
+# Calculate averages and standard deviations for pre, post, and total blocks per color
+blocks_df <- blocks_df %>%
+  mutate(
+    yellow_pre = rowMeans(select(., starts_with("y") & ends_with("_avg") & matches("y[1-3]_avg")), na.rm = TRUE),
+    yellow_post = rowMeans(select(., starts_with("y") & ends_with("_avg") & matches("y[4-6]_avg")), na.rm = TRUE),
+    yellow_total = rowMeans(select(., starts_with("y") & ends_with("_avg")), na.rm = TRUE),
+    blue_pre = rowMeans(select(., starts_with("b") & ends_with("_avg") & matches("b[1-3]_avg")), na.rm = TRUE),
+    blue_post = rowMeans(select(., starts_with("b") & ends_with("_avg") & matches("b[4-6]_avg")), na.rm = TRUE),
+    blue_total = rowMeans(select(., starts_with("b") & ends_with("_avg")), na.rm = TRUE),
+    orange_pre = rowMeans(select(., starts_with("o") & ends_with("_avg") & matches("o[1-3]_avg")), na.rm = TRUE),
+    orange_post = rowMeans(select(., starts_with("o") & ends_with("_avg") & matches("o[4-6]_avg")), na.rm = TRUE),
+    orange_total = rowMeans(select(., starts_with("o") & ends_with("_avg")), na.rm = TRUE)
+  )
+
+# Join these new averages to the main dataframe
+df_extended <- left_join(df_extended, blocks_df %>% select(participant_id, ends_with("_pre"), ends_with("_post"), ends_with("_total")), by = "participant_id")
+```
+
+### Group-Level Summary
+
+Calculate the mean and standard deviation from the distribution of block averages across all participants:
+
+```{r}
+group_df <- blocks_df %>%
+  summarise(across(-participant_id, 
+                   list(avg_all = ~mean(.x, na.rm = TRUE), 
+                        sd_all = ~sd(.x, na.rm = TRUE))))
+
+# Append group-level data to the original dataframe (as single row repeated)
+df_extended <- bind_cols(df_extended, group_df[rep(1, nrow(df_extended)), ])
+```
+
+
+
+
+
+
+---
+title: "BART Block Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(tidyr)
+```
+
+### Data Preparation
+
+Replace `df` with your actual dataframe name.
+
+```{r}
+# Assume df is your dataframe
+colors <- c("b", "o", "y")
+block_size <- 10
+
+# Function to calculate block statistics per color
+calculate_block_stats <- function(df, color_label, block_num) {
+  block_name <- paste0(color_label, block_num)
+  
+  df %>%
+    group_by(participant_id) %>%
+    filter(balloon_color == color_label) %>%
+    mutate(color_trial_order = row_number()) %>%
+    filter(color_trial_order > (block_num - 1) * block_size &
+           color_trial_order <= block_num * block_size) %>%
+    summarise(
+      !!paste0(block_name, "_avg") := mean(inflations, na.rm = TRUE),
+      !!paste0(block_name, "_part_sd") := sd(inflations, na.rm = TRUE),
+      !!paste0(block_name, "_adj") := mean(inflations[popped == 0], na.rm = TRUE),
+      !!paste0(block_name, "_earnings") := sum(inflations[popped == 0], na.rm = TRUE) * 0.003,
+      .groups = "drop"
+    )
+}
+
+# Calculate blocks for each color and bind them
+blocks_df <- NULL
+
+for(color_label in colors) {
+  for(block_num in 1:6) { # assuming you have up to 6 blocks per color (1-60 trials per color)
+    block_stats <- calculate_block_stats(df, color_label, block_num)
+    blocks_df <- if(is.null(blocks_df)) block_stats else full_join(blocks_df, block_stats, by = "participant_id")
+  }
+}
+
+# Join the new data to the original dataframe (repeated values per participant)
+df_extended <- left_join(df, blocks_df, by = "participant_id")
+
+# Calculate averages, adjusted inflations, and earnings for pre, post, and total blocks per color
+blocks_df <- blocks_df %>%
+  mutate(
+    yellow_pre = rowMeans(select(., starts_with("y") & ends_with("_avg") & matches("y[1-3]_avg")), na.rm = TRUE),
+    yellow_post = rowMeans(select(., starts_with("y") & ends_with("_avg") & matches("y[4-6]_avg")), na.rm = TRUE),
+    yellow_total = rowMeans(select(., starts_with("y") & ends_with("_avg")), na.rm = TRUE),
+    blue_pre = rowMeans(select(., starts_with("b") & ends_with("_avg") & matches("b[1-3]_avg")), na.rm = TRUE),
+    blue_post = rowMeans(select(., starts_with("b") & ends_with("_avg") & matches("b[4-6]_avg")), na.rm = TRUE),
+    blue_total = rowMeans(select(., starts_with("b") & ends_with("_avg")), na.rm = TRUE),
+    orange_pre = rowMeans(select(., starts_with("o") & ends_with("_avg") & matches("o[1-3]_avg")), na.rm = TRUE),
+    orange_post = rowMeans(select(., starts_with("o") & ends_with("_avg") & matches("o[4-6]_avg")), na.rm = TRUE),
+    orange_total = rowMeans(select(., starts_with("o") & ends_with("_avg")), na.rm = TRUE),
+    yellow_pre_adj = rowMeans(select(., matches("y[1-3]_adj")), na.rm = TRUE),
+    yellow_post_adj = rowMeans(select(., matches("y[4-6]_adj")), na.rm = TRUE),
+    yellow_total_adj = rowMeans(select(., matches("y.*_adj")), na.rm = TRUE),
+    blue_pre_adj = rowMeans(select(., matches("b[1-3]_adj")), na.rm = TRUE),
+    blue_post_adj = rowMeans(select(., matches("b[4-6]_adj")), na.rm = TRUE),
+    blue_total_adj = rowMeans(select(., matches("b.*_adj")), na.rm = TRUE),
+    orange_pre_adj = rowMeans(select(., matches("o[1-3]_adj")), na.rm = TRUE),
+    orange_post_adj = rowMeans(select(., matches("o[4-6]_adj")), na.rm = TRUE),
+    orange_total_adj = rowMeans(select(., matches("o.*_adj")), na.rm = TRUE),
+    yellow_pre_earnings = rowSums(select(., matches("y[1-3]_earnings")), na.rm = TRUE),
+    yellow_post_earnings = rowSums(select(., matches("y[4-6]_earnings")), na.rm = TRUE),
+    yellow_total_earnings = rowSums(select(., matches("y.*_earnings")), na.rm = TRUE),
+    blue_pre_earnings = rowSums(select(., matches("b[1-3]_earnings")), na.rm = TRUE),
+    blue_post_earnings = rowSums(select(., matches("b[4-6]_earnings")), na.rm = TRUE),
+    blue_total_earnings = rowSums(select(., matches("b.*_earnings")), na.rm = TRUE),
+    orange_pre_earnings = rowSums(select(., matches("o[1-3]_earnings")), na.rm = TRUE),
+    orange_post_earnings = rowSums(select(., matches("o[4-6]_earnings")), na.rm = TRUE),
+    orange_total_earnings = rowSums(select(., matches("o.*_earnings")), na.rm = TRUE)
+  )
+
+# Join these new averages, adjusted inflations, and earnings to the main dataframe
+df_extended <- left_join(df_extended, blocks_df %>% select(participant_id, ends_with("_pre"), ends_with("_post"), ends_with("_total")), by = "participant_id")
+```
+
+### Group-Level Summary
+
+Calculate the mean and standard deviation from the distribution of block averages and earnings across all participants:
+
+```{r}
+group_df <- blocks_df %>%
+  summarise(across(-participant_id, 
+                   list(avg_all = ~mean(.x, na.rm = TRUE), 
+                        sd_all = ~sd(.x, na.rm = TRUE))))
+
+# Append group-level data to the original dataframe (as single row repeated)
+df_extended <- bind_cols(df_extended, group_df[rep(1, nrow(df_extended)), ])
+```
+
+Your dataframe `df_extended` now contains all required individual and group-level data, and `group_df` contains the summarized group-level data explicitly.
+
+
+
+
+
+
+---
+title: "BART Block Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(tidyr)
+```
+
+```{r}
+# Assume df is your dataframe
+colors <- c("b", "o", "y")
+block_size <- 10
+
+# Function to calculate block statistics per color
+calculate_block_stats <- function(df, color_label, block_num) {
+  block_name <- paste0(color_label, block_num)
+  
+  df %>%
+    group_by(participant_id) %>%
+    filter(balloon_color == color_label) %>%
+    mutate(color_trial_order = row_number()) %>%
+    filter(color_trial_order > (block_num - 1) * block_size &
+           color_trial_order <= block_num * block_size) %>%
+    summarise(
+      !!paste0(block_name, "_avg") := mean(inflations, na.rm = TRUE),
+      !!paste0(block_name, "_part_sd") := sd(inflations, na.rm = TRUE),
+      !!paste0(block_name, "_adj") := mean(inflations[popped == 0], na.rm = TRUE),
+      !!paste0(block_name, "_earnings") := sum(inflations[popped == 0], na.rm = TRUE) * 0.003,
+      .groups = "drop"
+    )
+}
+
+# Calculate blocks for each color and bind them
+blocks_df <- NULL
+
+for(color_label in colors) {
+  for(block_num in 1:6) { # assuming you have up to 6 blocks per color (1-60 trials per color)
+    block_stats <- calculate_block_stats(df, color_label, block_num)
+    blocks_df <- if(is.null(blocks_df)) block_stats else full_join(blocks_df, block_stats, by = "participant_id")
+  }
+}
+
+# Join the new data to the original dataframe (repeated values per participant)
+df_extended <- left_join(df, blocks_df, by = "participant_id")
+
+# Calculate averages, adjusted inflations, and earnings for pre, post, and total blocks per color
+blocks_df <- blocks_df %>%
+  mutate(
+    yellow_pre = rowMeans(select(., starts_with("y") & ends_with("_avg") & matches("y[1-3]_avg")), na.rm = TRUE),
+    yellow_post = rowMeans(select(., starts_with("y") & ends_with("_avg") & matches("y[4-6]_avg")), na.rm = TRUE),
+    yellow_total = rowMeans(select(., starts_with("y") & ends_with("_avg")), na.rm = TRUE),
+    blue_pre = rowMeans(select(., starts_with("b") & ends_with("_avg") & matches("b[1-3]_avg")), na.rm = TRUE),
+    blue_post = rowMeans(select(., starts_with("b") & ends_with("_avg") & matches("b[4-6]_avg")), na.rm = TRUE),
+    blue_total = rowMeans(select(., starts_with("b") & ends_with("_avg")), na.rm = TRUE),
+    orange_pre = rowMeans(select(., starts_with("o") & ends_with("_avg") & matches("o[1-3]_avg")), na.rm = TRUE),
+    orange_post = rowMeans(select(., starts_with("o") & ends_with("_avg") & matches("o[4-6]_avg")), na.rm = TRUE),
+    orange_total = rowMeans(select(., starts_with("o") & ends_with("_avg")), na.rm = TRUE),
+    yellow_pre_adj = rowMeans(select(., matches("y[1-3]_adj")), na.rm = TRUE),
+    yellow_post_adj = rowMeans(select(., matches("y[4-6]_adj")), na.rm = TRUE),
+    yellow_total_adj = rowMeans(select(., matches("y.*_adj")), na.rm = TRUE),
+    blue_pre_adj = rowMeans(select(., matches("b[1-3]_adj")), na.rm = TRUE),
+    blue_post_adj = rowMeans(select(., matches("b[4-6]_adj")), na.rm = TRUE),
+    blue_total_adj = rowMeans(select(., matches("b.*_adj")), na.rm = TRUE),
+    orange_pre_adj = rowMeans(select(., matches("o[1-3]_adj")), na.rm = TRUE),
+    orange_post_adj = rowMeans(select(., matches("o[4-6]_adj")), na.rm = TRUE),
+    orange_total_adj = rowMeans(select(., matches("o.*_adj")), na.rm = TRUE),
+    yellow_pre_earnings = rowSums(select(., matches("y[1-3]_earnings")), na.rm = TRUE),
+    yellow_post_earnings = rowSums(select(., matches("y[4-6]_earnings")), na.rm = TRUE),
+    yellow_total_earnings = rowSums(select(., matches("y.*_earnings")), na.rm = TRUE),
+    blue_pre_earnings = rowSums(select(., matches("b[1-3]_earnings")), na.rm = TRUE),
+    blue_post_earnings = rowSums(select(., matches("b[4-6]_earnings")), na.rm = TRUE),
+    blue_total_earnings = rowSums(select(., matches("b.*_earnings")), na.rm = TRUE),
+    orange_pre_earnings = rowSums(select(., matches("o[1-3]_earnings")), na.rm = TRUE),
+    orange_post_earnings = rowSums(select(., matches("o[4-6]_earnings")), na.rm = TRUE),
+    orange_total_earnings = rowSums(select(., matches("o.*_earnings")), na.rm = TRUE)
+  )
+
+# Join these new averages, adjusted inflations, and earnings to the main dataframe
+df_extended <- left_join(df_extended, blocks_df %>% select(participant_id, ends_with("_pre"), ends_with("_post"), ends_with("_total")), by = "participant_id")
+```
+
+### Group-Level Summary
+
+Calculate the mean and standard deviation from the distribution of block averages and earnings across all participants:
+
+```{r}
+group_df <- blocks_df %>%
+  summarise(across(-participant_id, 
+                   list(avg_all = ~mean(.x, na.rm = TRUE), 
+                        sd_all = ~sd(.x, na.rm = TRUE))))
+
+# Append group-level data to the original dataframe (as single row repeated)
+df_extended <- bind_cols(df_extended, group_df[rep(1, nrow(df_extended)), ])
+```
