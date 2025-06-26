@@ -1,0 +1,290 @@
+---
+title: "ewmv_separate_runs"
+author: "Zach Tefertiller"
+date: "2025-06-26"
+output: html_document
+---
+
+
+
+```{r pre and post reversal for ewmv}
+## dataframes, stan fit objects, and model fitting
+df_trials_1_90 <- df %>% filter(trial_number <= 90)
+df_trials_91_180 <- df %>% filter(trial_number > 90)
+
+
+stan_data_1_90 <- create_stan_params(df_trials_1_90)
+stan_data_91_180 <- create_stan_params(df_trials_91_180)
+
+ewmv_1_90 <- cmd_stan_fit(stan_data_1_90, "ewmv_trials_1_90")
+ewmv_91_180 <- cmd_stan_fit(stan_data_91_180, "ewmv_trials_91_180")
+
+variables_1_90 <- ewmv_1_90$draws() %>% variables()
+group_params_1_90 <- grep("mu", variables_1_90, value = TRUE)
+group_draws_1_90 <- ewmv_1_90$draws(variables = group_params_1_90)
+summary_1_90 <- ewmv_1_90$summary()
+print("Summary for Trials 1-90:")
+print(summary_1_90)
+
+variables_91_180 <- ewmv_91_180$draws() %>% variables()
+group_params_91_180 <- grep("mu", variables_91_180, value = TRUE)
+group_draws_91_180 <- ewmv_91_180$draws(variables = group_params_91_180)
+summary_91_180 <- ewmv_91_180$summary()
+print("Summary for Trials 91-180:")
+print(summary_91_180)
+
+```
+
+
+``` {r}
+library(cmdstanr)
+
+## load in runs from office machine
+
+# Paths to CSVs
+csv_files_1_90 <- list.files("/Volumes/Transcend/ewmv_1_90/", full.names = TRUE, pattern = "\\.csv$")
+csv_files_91_180 <- list.files("/Volumes/Transcend/ewmv_91_180/", full.names = TRUE, pattern = "\\.csv$")
+
+# Reconstruct CmdStanR fit objects
+fit_1_90 <- as_cmdstan_fit(csv_files_1_90)
+fit_91_180 <- as_cmdstan_fit(csv_files_91_180)
+
+# Optionally save as RDS for quick access in future
+saveRDS(fit_1_90, "/Volumes/Transcend/mcmc/ewmv_1_90.rds")
+saveRDS(fit_91_180, "/Volumes/Transcend/mcmc/ewmv_91_180.rds")
+
+
+```
+
+
+```{r}
+# ================================================================
+#  EXTRACT EW-MV PARAMETER MEANS (WIDE: pre_*  /  post_* columns)
+# ================================================================
+
+library(cmdstanr)
+library(posterior)
+library(tibble)
+library(dplyr)
+library(readr)
+
+# -------------------------------------------------
+# helper: returns means with real char IDs
+# -------------------------------------------------
+get_ewmv_param_means <- function(fit, stan_data, id_vector) {
+  draws <- fit$draws(variables = c("phi", "eta", "rho", "tau", "lambda")) |>
+           as_draws_df() |> as.data.frame()
+
+  nsub <- stan_data$nsub
+  
+  tibble(
+    participant_id = id_vector,
+    phi    = sapply(1:nsub, \(j) mean(draws[[sprintf("phi[%d]",    j)]])),
+    eta    = sapply(1:nsub, \(j) mean(draws[[sprintf("eta[%d]",    j)]])),
+    rho    = sapply(1:nsub, \(j) mean(draws[[sprintf("rho[%d]",    j)]])),
+    tau    = sapply(1:nsub, \(j) mean(draws[[sprintf("tau[%d]",    j)]])),
+    lambda = sapply(1:nsub, \(j) mean(draws[[sprintf("lambda[%d]", j)]]))
+  )
+}
+
+# ----------------------------------------------------------------
+# 1) parameter tables for pre-block (1-90) and post-block (91-180)
+# ----------------------------------------------------------------
+ids_1_90   <- unique(df_trials_1_90$participant_id)
+ids_91_180 <- unique(df_trials_91_180$participant_id)
+
+params_pre  <- get_ewmv_param_means(fit_1_90,   stan_data_1_90,   ids_1_90)   |>
+               rename_with(~ paste0("pre_",  .x), -participant_id)
+
+params_post <- get_ewmv_param_means(fit_91_180, stan_data_91_180, ids_91_180) |>
+               rename_with(~ paste0("post_", .x), -participant_id)
+
+# ----------------------------------------------------------------
+# 2) join pre + post wide, then attach questionnaires
+# ----------------------------------------------------------------
+df_ewmv_summary <- params_pre %>% 
+           full_join(params_post, by = "participant_id") %>% 
+           left_join(df_questionnaires, by = "participant_id")
+
+# ----------------------------------------------------------------
+# 3) save
+# ----------------------------------------------------------------
+write_csv(df_ewmv_summary, "ewmv_pre_post_wide.csv")
+
+# ==========================================================
+#  COMBINE TRIAL-LEVEL DATA  +  ATTACH EW-MV PARAMETERS
+# ==========================================================
+
+# --- 1)  bind the two trial blocks and sort ----------------
+df_trials_all <- bind_rows(df_trials_1_90, df_trials_91_180) %>% 
+  arrange(participant_id, trial_number)
+
+# --- 2)  keep only NEW columns from df_ewmv_summary ----------
+#     (i.e. columns that are not already in df_trials_all)
+new_cols <- setdiff(names(df_ewmv_summary), names(df_trials_all))
+new_cols <- setdiff(new_cols, "participant_id")   # keep ID for the join
+
+df_ewmv_all <- df_trials_all %>% 
+  left_join(df_ewmv_summary %>% select(participant_id, all_of(new_cols)),
+            by = "participant_id")
+
+# 0)  ensure cigarettes_count not NA  -----------------------
+df_ewmv_all <- df_ewmv_all %>% 
+  mutate(cigarettes_count = tidyr::replace_na(cigarettes_count, 0))
+
+# ==========================================================
+# 1)  participant-level RT and schizotypy -------------------
+rt_summary <- df_ewmv_all %>% 
+  group_by(participant_id) %>% 
+  summarise(average_rt_total = mean(average_inflation_rt, na.rm = TRUE),
+            .groups = "drop")
+
+sz_summary <- df_ewmv_all %>% 
+  group_by(participant_id) %>% 
+  summarise(
+    schizotypy_aggregate = first(
+      coalesce(spq_total, 0) +
+      coalesce(caps_total, 0) +
+      coalesce(pdi_total, 0)
+    ),
+    .groups = "drop")
+
+# ==========================================================
+# 2)  demographics (age + cigarettes) -----------------------
+demo_cols <- df_ewmv_all %>% 
+  distinct(participant_id, age, cigarettes_count)
+
+# ==========================================================
+# 3)  assemble per-participant info -------------------------
+param_cols <- c(
+  "pre_phi","pre_eta","pre_rho","pre_tau","pre_lambda",
+  "post_phi","post_eta","post_rho","post_tau","post_lambda"
+)
+
+all_q_cols <- c("spq_total","ipip_total","pdi_total","pdi_distress",
+                "pdi_frequency","pdi_conviction",
+                "caps_total","caps_distress","caps_intrusiveness","caps_frequency",
+                "phq_total","ppgm_total","mdq_total")
+
+q_cols_needed <- setdiff(all_q_cols, names(df_ewmv_all))
+
+participant_info <- df_ewmv_summary %>% 
+  select(participant_id, all_of(param_cols), any_of(q_cols_needed)) %>% 
+  ## note: *no* age / cigarettes here; they'll come from demo_cols
+  left_join(demo_cols, by = "participant_id") %>% 
+  left_join(rt_summary, by = "participant_id") %>% 
+  left_join(sz_summary, by = "participant_id")
+
+# ==========================================================
+# 4)  attach to every trial row (avoid dups) ----------------
+df_ewmv_all <- df_ewmv_all %>% 
+  select(-any_of(param_cols)) %>%            # drop any stale params first
+  left_join(participant_info, by = "participant_id")
+
+# ==========================================================
+# 5)  clean up long questionnaire items & raw columns -------
+df_ewmv_all <- df_ewmv_all %>% 
+  # 1) remove individual questionnaire items
+  select(
+    -matches("^spq_q\\d+$"),
+    -matches("^pdi_q\\d+$"),
+    -matches("^caps_q\\d+$"),
+    -matches("^mdq_q\\d+$")
+  ) %>% 
+  # 2) remove attention-check flags
+  select(-matches("_attention_")) %>% 
+  # 3) drop raw task mechanics or z-scores we no longer need
+  select(
+    -inflation_rts,
+    -total_inactive, -inactivity_pop,
+    -points_earned, -color_max, -opportunity,
+    -spq_z, -pdi_z, -caps_z, -optimal_inflations, -total_points_so_far
+  ) %>% 
+  # 4) drop superseded score columns (now have versions w/o suffix)
+  select(-spq_total_score, -ipip_total_score)
+
+df_ewmv_all <- df_ewmv_all %>% 
+  rename(
+    age              = age.x,
+    cigarettes_count = cigarettes_count.x
+  ) %>% 
+  select(-age.y, -cigarettes_count.y)
+# optional sanity-check
+# glimpse(df_ewmv_all)
+
+write_csv(df_ewmv_all, "ewmv_all.csv")
+
+```
+
+```{r}
+library(dplyr)
+library(purrr)
+library(tidyr)
+library(readr)
+
+colors     <- c("b","o","y")
+block_size <- 10
+max_blocks <- 6
+
+# -------------------------------------------------------------------------
+# 1) helper: participant-level stats for a single colour × block -----------
+calc_block_stats <- function(df, colour, blk) {
+  blk_name <- paste0(colour, blk)
+
+  df %>% 
+    filter(balloon_color == colour) %>% 
+    group_by(participant_id) %>% 
+    mutate(colour_trial_order = row_number()) %>% 
+    filter(between(colour_trial_order,
+                   (blk - 1) * block_size + 1,
+                   blk * block_size)) %>% 
+    summarise(
+      !!paste0(blk_name, "_part_avg")      := mean(inflations, na.rm = TRUE),
+      !!paste0(blk_name, "_part_adj")      := mean(inflations[popped == 0], na.rm = TRUE),
+      !!paste0(blk_name, "_part_sd")       := sd(inflations, na.rm = TRUE),
+      !!paste0(blk_name, "_part_earnings") := sum(inflations[popped == 0], na.rm = TRUE) * 0.003,
+      .groups = "drop"
+    )
+}
+
+# -------------------------------------------------------------------------
+# 2) build ONE wide table (no duplicate IDs) -------------------------------
+block_tbls <- map(colors, \(col)
+  map(1:max_blocks, \(blk) calc_block_stats(df_ewmv_all, col, blk))
+) |> flatten()          # list of 18 tibbles
+
+blocks_part <- reduce(block_tbls, full_join, by = "participant_id")
+
+# -------------------------------------------------------------------------
+# 3) single-row group summary ---------------------------------------------
+calc_group_stats <- function(part_df, colour, blk) {
+  blk_name <- paste0(colour, blk)
+  tibble(
+    !!paste0(blk_name, "_group_avg")       := mean(part_df[[paste0(blk_name, "_part_avg")]],      na.rm = TRUE),
+    !!paste0(blk_name, "_group_adjusted")  := mean(part_df[[paste0(blk_name, "_part_adj")]],      na.rm = TRUE),
+    !!paste0(blk_name, "_group_sd")        := sd  (part_df[[paste0(blk_name, "_part_avg")]],      na.rm = TRUE),
+    !!paste0(blk_name, "_group_earnings")  := mean(part_df[[paste0(blk_name, "_part_earnings")]], na.rm = TRUE)
+  )
+}
+
+group_row <- map_dfc(colors, \(col)
+  map_dfc(1:max_blocks, \(blk) calc_group_stats(blocks_part, col, blk))
+)
+
+# -------------------------------------------------------------------------
+# 4) merge into df_ewmv_summary -------------------------------------------
+df_ewmv_summary <- df_ewmv_summary %>%          # has one row per participant
+  left_join(blocks_part, by = "participant_id")
+
+# replicate group stats across all rows once, then bind
+df_ewmv_summary <- bind_cols(
+  df_ewmv_summary,
+  group_row[rep(1, nrow(df_ewmv_summary)), ]    # nrow() not n()
+)
+
+# -------------------------------------------------------------------------
+# 5) save ------------------------------------------------------------------
+write_csv(df_ewmv_summary, "ewmv_by_block.csv")
+write_csv(group_row,       "ewmv_group_block_summary.csv")
+
+```
